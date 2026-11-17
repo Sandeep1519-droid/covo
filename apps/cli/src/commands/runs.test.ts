@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MockProvider } from "@cw/models";
@@ -54,4 +54,55 @@ test("cw status and cw log show the run", async () => {
 test("cw log explains unknown runs", async () => {
   expect((await main(["log", "zzzz"], env())).out).toContain('No run "zzzz"');
   expect((await main(["log", "last"], env())).out).toContain("no runs yet");
+});
+
+// ---------------------------------------------------------------- review (M6)
+
+const readme = () => readFileSync(join(home, "workspaces/default/README.md"), "utf8");
+
+test("cw run points to diff, keep and discard", async () => {
+  const r = await main(["run", "add Setup"], env(), { print, provider: provider() });
+  expect(r.out).toMatch(/cw diff \w{6}\n {2}Keep them: {8}cw keep \w{6}/);
+});
+
+test("cw diff shows a unified diff; --stat a summary", async () => {
+  await main(["run", "add Setup"], env(), { print, provider: provider() });
+  const d = await main(["diff", "last"], env());
+  expect(d.code).toBe(0);
+  expect(d.out).toContain("1 modified, 0 added, 0 deleted");
+  expect(d.out).toContain("modified README.md\n@@ -1 +1,3 @@\n # Project\n+\n+## Setup\n");
+  expect(d.out).not.toContain("\x1b[");
+  const s = await main(["diff", "last", "--stat"], env());
+  expect(s.out).toContain("modified README.md  +2 -0");
+  expect((await main(["diff", "last"], env(), { color: true })).out).toContain("\x1b[32m+## Setup\x1b[0m");
+});
+
+test("cw keep lands the change in the workspace", async () => {
+  await main(["run", "add Setup"], env(), { print, provider: provider() });
+  expect(readme()).toBe("# Project\n");
+  const k = await main(["keep", "last"], env());
+  expect(k.code).toBe(0);
+  expect(k.out).toContain("Kept 1 file in");
+  expect(readme()).toBe("# Project\n\n## Setup\n");
+  expect((await main(["status"], env())).out).toContain("KEPT");
+  expect((await main(["keep", "last"], env())).out).toContain("already kept");
+  expect((await main(["audit", "verify"], env())).code).toBe(0);
+});
+
+test("cw keep explains a clash with your own edit and keeps nothing", async () => {
+  await main(["run", "add Setup"], env(), { print, provider: provider() });
+  writeFileSync(join(home, "workspaces/default/README.md"), "# Mine, edited meanwhile\n");
+  const k = await main(["keep", "last"], env());
+  expect(k.code).toBe(1);
+  expect(k.out).toContain("Nothing was kept");
+  expect(k.out).toContain("README.md  (you changed it after the run started)");
+  expect(readme()).toBe("# Mine, edited meanwhile\n");
+});
+
+test("cw discard throws the changes away", async () => {
+  await main(["run", "add Setup"], env(), { print, provider: provider() });
+  const d = await main(["discard", "last"], env());
+  expect(d.out).toContain("Threw away 1 change");
+  expect(readme()).toBe("# Project\n");
+  expect((await main(["diff", "last"], env())).out).toContain("already thrown away");
 });

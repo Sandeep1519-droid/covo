@@ -174,6 +174,21 @@ export class CowWorkspaces {
     return { applied: changes, conflicts: [] };
   }
 
+  /**
+   * The two versions of a changed path, for showing a diff: the real workspace file and the run's
+   * copy (null when missing or not a regular file). `workspaceChanged` is true when someone changed
+   * the workspace file after the run started; keep() would refuse it.
+   */
+  versions(runId: string, path: string): { before: Buffer | null; after: Buffer | null; workspaceChanged: boolean } {
+    const { workspace, manifest: base } = this.base(runId);
+    const read = (p: string) => (entryAt(p)?.kind === "file" ? readFileSync(p) : null);
+    const wsFile = join(workspace, path);
+    const current = entryAt(wsFile);
+    const b = base[path];
+    const workspaceChanged = b ? !current || !sameMeta(b, current) : Boolean(current);
+    return { before: read(wsFile), after: read(join(this.wsPath(runId), path)), workspaceChanged };
+  }
+
   /** Deletes only the workspace copy, keeping the run's records (transcript, manifest). */
   dropCopy(runId: string): void {
     rmSync(this.wsPath(runId), { recursive: true, force: true });

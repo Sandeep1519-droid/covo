@@ -1,5 +1,6 @@
 import { canonicalJson, sha256Hex } from "@cw/core";
 import { type ChatMessage, collect, type ModelProvider, type ToolCall, type ToolSpec } from "@cw/models";
+import { toolCallsFromText } from "./text-tools.ts";
 import type { ToolResult } from "./tools.ts";
 
 // The agent loop: ask the model, run the tools it asks for, send back the results, repeat until it
@@ -43,6 +44,8 @@ export interface ToolStep {
 export interface LoopHooks {
   onModel?(t: ModelTurn): void | Promise<void>;
   onTool?(s: ToolStep): void | Promise<void>;
+  /** Tool calls were recovered from the reply's text. */
+  onRecovered?(count: number): void | Promise<void>;
 }
 
 export interface LoopInput {
@@ -92,6 +95,14 @@ export async function runLoop(input: LoopInput): Promise<LoopResult> {
     turn++;
     tokensIn += r.usage.tokensIn;
     tokensOut += r.usage.tokensOut;
+    // No real calls? A small model may have typed them as JSON; use those instead.
+    const toolCalls: typeof r.toolCalls = r.toolCalls.length
+      ? r.toolCalls
+      : toolCallsFromText(
+          r.text,
+          input.tools.map((t) => t.name),
+        ).map((c) => ({ type: "tool_call" as const, ...c }));
+    if (!r.toolCalls.length && toolCalls.length) await input.hooks?.onRecovered?.(toolCalls.length);
     await input.hooks?.onModel?.({
       turn,
       secs: (now() - t0) / 1000,
@@ -99,14 +110,14 @@ export async function runLoop(input: LoopInput): Promise<LoopResult> {
       tokensOut: r.usage.tokensOut,
       text: r.text,
       reasoning: r.reasoning,
-      toolCalls: r.toolCalls.length,
+      toolCalls: toolCalls.length,
     });
     if (r.stop === "error") {
       if (input.signal?.aborted) return done({ kind: "stopped", reason: "Stopped by you." });
       return done({ kind: "failed", error: r.error ?? "The model returned an error." });
     }
 
-    const calls = r.toolCalls.map((t) => t.call);
+    const calls = toolCalls.map((t) => t.call);
     messages.push({ role: "assistant", content: r.text, ...(calls.length ? { toolCalls: calls } : {}) });
 
     if (calls.length === 0) {
@@ -118,7 +129,7 @@ export async function runLoop(input: LoopInput): Promise<LoopResult> {
       return done({ kind: "finished", summary: r.text.trim() || "The bot stopped without a summary.", via: "text" });
     }
 
-    for (const tc of r.toolCalls) {
+    for (const tc of toolCalls) {
       steps++;
       if (steps > limits.maxSteps) return done({ kind: "stopped", reason: `Step limit reached (${limits.maxSteps}).` });
       const s0 = now();

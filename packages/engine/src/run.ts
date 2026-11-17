@@ -8,6 +8,7 @@ import { cloner, sandbox as defaultSandbox, type Sandbox, type WorkspaceCloner }
 import { CowWorkspaces, type DiffSummary } from "@cw/sandbox";
 import { type LoopLimits, type ModelTurn, runLoop } from "./loop.ts";
 import { systemPrompt, taskMessage } from "./prompt.ts";
+import { type RunState, recordState } from "./state.ts";
 import { runTool, TOOL_SPECS } from "./tools.ts";
 
 // One run, start to finish:
@@ -16,14 +17,14 @@ import { runTool, TOOL_SPECS } from "./tools.ts";
 //                                                            → SUCCEEDED   nothing changed
 //                                                            → STOPPED     a guard or you stopped it; copy deleted
 //                                                            → FAILED      model or system error; copy deleted
+//   REVIEWING → KEPT (your workspace gets the changes) or DISCARDED (copy deleted); see review.ts
 //
 // Each state change is written to the database and the activity log before anything else happens.
-
-export type RunState = "QUEUED" | "PREPARING" | "RUNNING" | "REVIEWING" | "SUCCEEDED" | "STOPPED" | "FAILED";
 
 export type RunEvent =
   | { type: "state"; runId: string; state: RunState }
   | ({ type: "model" } & ModelTurn)
+  | { type: "recovered"; count: number }
   | {
       type: "tool";
       seq: number;
@@ -140,23 +141,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
   );
 
   const setState = (next: RunState, extra: { summary?: string; error?: string } = {}) => {
-    const t = now();
-    db.query(
-      `UPDATE runs SET state = ?, summary = COALESCE(?, summary), error = COALESCE(?, error),
-         started_at = CASE WHEN ? = 'RUNNING' THEN ? ELSE started_at END,
-         finished_at = CASE WHEN ? IN ('REVIEWING','SUCCEEDED','STOPPED','FAILED') THEN ? ELSE finished_at END
-       WHERE id = ?`,
-    ).run(next, extra.summary ?? null, extra.error ?? null, next, t, next, t, runId);
-    appendAudit(
-      db,
-      { actor: "system", action: "run.state", runId, target: next, detail: { from: state, to: next, ...extra } },
-      now,
-    );
-    db.query("INSERT INTO events (run_id, ts, type, payload_json) VALUES (?, ?, 'run.state', ?)").run(
-      runId,
-      t,
-      canonicalJson({ from: state, to: next }),
-    );
+    recordState(db, runId, state, next, extra, now);
     state = next;
     o.onEvent?.({ type: "state", runId, state: next });
   };
@@ -213,6 +198,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       exec: (name, args) =>
         runTool(name, args, { ws, tmp, sandbox: sb, commandTimeoutMs: o.commandTimeoutMs ?? 60_000 }),
       hooks: {
+        onRecovered: (count) => o.onEvent?.({ type: "recovered", count }),
         onModel: (t) => {
           addStep("model", {
             args_json: canonicalJson({ tokensIn: t.tokensIn, tokensOut: t.tokensOut, secs: t.secs }),

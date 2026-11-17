@@ -39,7 +39,7 @@ packages/models    model providers: Ollama or any OpenAI-compatible service, plu
 packages/engine    the bot: workspace tools, tool loop with guards, and the run lifecycle
 ```
 
-Reviewing and keeping a run's changes (`cw diff`, `keep`, `discard`) arrives with milestone M6. Models default to local Ollama (`qwen3:4b`); see `cw --help` for the `CW_MODEL*` settings.
+A bot always works on an instant copy of your workspace. Nothing in your real files changes until you review the run with `cw diff` and choose `cw keep` (all files, or just some) or `cw discard`. If you edited a file yourself while the bot worked, `cw keep` refuses that file instead of overwriting your edit. Models default to local Ollama (`qwen3.5:4b`, thinking off, 8K context); see `cw --help` for the `CW_MODEL*` settings.
 
 Try it with a throwaway data folder:
 
@@ -47,6 +47,8 @@ Try it with a throwaway data folder:
 CW_HOME=/tmp/cw-try bun run cw init
 CW_HOME=/tmp/cw-try bun run cw doctor
 CW_HOME=/tmp/cw-try bun run cw run "add a Setup section to README.md"
+CW_HOME=/tmp/cw-try bun run cw diff last
+CW_HOME=/tmp/cw-try bun run cw keep last      # or: cw discard last
 CW_HOME=/tmp/cw-try bun run cw status
 CW_HOME=/tmp/cw-try bun run cw audit verify
 ```

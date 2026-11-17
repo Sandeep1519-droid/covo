@@ -64,6 +64,41 @@ describe("runTool", () => {
     expect(await runTool("finish", { summary: "All set" }, ctx())).toMatchObject({ finished: "All set" });
   });
 
+  test("edit_file changes only the matching text", async () => {
+    writeFileSync(join(ws, "notes.md"), "# Notes\n\nOne\nTwo\n");
+    const r = await runTool(
+      "edit_file",
+      { path: "notes.md", old_text: "One\n", new_text: "One\nOne and a half\n" },
+      ctx(),
+    );
+    expect(r).toMatchObject({ ok: true, mutating: true, label: "+1 lines" });
+    expect(readFileSync(join(ws, "notes.md"), "utf8")).toBe("# Notes\n\nOne\nOne and a half\nTwo\n");
+  });
+
+  test("edit_file explains a missing or repeated match and changes nothing", async () => {
+    writeFileSync(join(ws, "a.txt"), "x\nx\n");
+    const missing = await runTool("edit_file", { path: "a.txt", old_text: "y", new_text: "z" }, ctx());
+    expect(missing).toMatchObject({ ok: false, label: "text not found", mutating: false });
+    expect(missing.output).toContain("copy the exact text");
+    const twice = await runTool("edit_file", { path: "a.txt", old_text: "x", new_text: "z" }, ctx());
+    expect(twice).toMatchObject({ ok: false, label: "matches 2 times" });
+    expect((await runTool("edit_file", { path: "new.txt", old_text: "a", new_text: "b" }, ctx())).output).toContain(
+      "Use write_file",
+    );
+    expect(readFileSync(join(ws, "a.txt"), "utf8")).toBe("x\nx\n");
+  });
+
+  test("edit_file keeps $ patterns literal", async () => {
+    writeFileSync(join(ws, "p.sh"), "echo A\n");
+    await runTool("edit_file", { path: "p.sh", old_text: "A", new_text: "$& $1 $$" }, ctx());
+    expect(readFileSync(join(ws, "p.sh"), "utf8")).toBe("echo $& $1 $$\n");
+  });
+
+  test("edit_file refuses paths outside the workspace", async () => {
+    const r = await runTool("edit_file", { path: "../x", old_text: "a", new_text: "b" }, ctx());
+    expect(r).toMatchObject({ ok: false, blocked: "path" });
+  });
+
   test("refuses files outside the workspace and says so", async () => {
     const r = await runTool("read_file", { path: "~/.ssh/id_ed25519" }, ctx());
     expect(r).toMatchObject({ ok: false, blocked: "path" });
@@ -115,6 +150,37 @@ describe("runLoop", () => {
     const r = await runLoop({ provider, messages: [], tools: TOOL_SPECS, exec });
     expect(r.outcome).toEqual({ kind: "finished", summary: "It is done.", via: "text" });
     expect(provider.requests[1]?.messages.at(-1)).toEqual({ role: "user", content: NUDGE });
+  });
+
+  test("recovers a tool call the model typed as JSON text", async () => {
+    const typed = `I'll update it now:\n\n\`\`\`json\n${JSON.stringify({
+      command: "write_file",
+      arguments: { path: "README.md", content: '# Demo {x}\n\\"quoted\\"\n' },
+    })}\n\`\`\``;
+    const recovered: number[] = [];
+    const r = await runLoop({
+      provider: new MockProvider([MockProvider.text(typed), MockProvider.tool("finish", { summary: "ok" })]),
+      messages: [],
+      tools: TOOL_SPECS,
+      exec,
+      hooks: { onRecovered: (n) => void recovered.push(n) },
+    });
+    expect(recovered).toEqual([1]);
+    expect(r.outcome).toEqual({ kind: "finished", summary: "ok", via: "finish" });
+    expect(readFileSync(join(ws, "README.md"), "utf8")).toBe('# Demo {x}\n\\"quoted\\"\n');
+  });
+
+  test("ignores JSON in text that isn't a known tool", async () => {
+    const r = await runLoop({
+      provider: new MockProvider([
+        MockProvider.text('{"name": "delete_everything", "arguments": {}}'),
+        MockProvider.text('Done. Config: {"a": 1}'),
+      ]),
+      messages: [],
+      tools: TOOL_SPECS,
+      exec,
+    });
+    expect(r.outcome).toEqual({ kind: "finished", summary: 'Done. Config: {"a": 1}', via: "text" });
   });
 
   test("stops a bot that repeats itself", async () => {

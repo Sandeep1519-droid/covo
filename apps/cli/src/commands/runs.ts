@@ -73,6 +73,8 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       print(
         `  ${String(e.seq).padStart(2)} ${mark} ${pad(e.name, 12)} ${pad(e.target || "", 40)} ${e.blocked ? `blocked (${e.blocked === "path" ? "outside the workspace" : "by the sandbox"})` : e.label}\n`,
       );
+    } else if (e.type === "recovered") {
+      print(`     (the bot typed its tool call as text; Coworker understood it)\n`);
     } else if (e.type === "model" && e.toolCalls === 0 && e.text.trim()) {
       print(`     (the bot answered in words: "${pad(e.text.trim().replace(/\s+/g, " "), 60)}")\n`);
     }
@@ -88,9 +90,13 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
         `Changes waiting for you: ${r.diff.modified} modified, ${r.diff.added} added, ${r.diff.deleted} deleted.`,
       );
       for (const c of r.diff.changes.filter((c) => c.entry !== "dir")) lines.push(`  ${c.kind.padEnd(8)} ${c.path}`);
+      const short = r.runId.slice(-6);
       lines.push(
         "",
-        "Nothing in your workspace has changed yet. Reviewing and keeping changes arrives in the next milestone (cw diff / keep / discard).",
+        "Nothing in your workspace has changed yet.",
+        `  See the changes:  cw diff ${short}`,
+        `  Keep them:        cw keep ${short}`,
+        `  Throw them away:  cw discard ${short}`,
       );
     } else if (r.state === "SUCCEEDED") {
       lines.push(`Done in ${time}. No files were changed.`, `Bot's summary: ${r.summary}`);

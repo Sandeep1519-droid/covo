@@ -7,7 +7,8 @@ export function systemPrompt(botName: string, purpose: string): string {
     "You cannot reach anything outside the workspace, and there is no internet.",
     "Rules:",
     "- Look before you change: list or read files first.",
-    "- write_file replaces the whole file, so include everything the file should contain.",
+    "- To change an existing file, use edit_file with the exact text to replace. Keep everything else as it is.",
+    "- Use write_file only for new files. It replaces the whole file.",
     "- Don't ask questions. Make sensible choices and keep going.",
     "- When the task is done, call finish with a one-sentence summary.",
   ].join("\n");

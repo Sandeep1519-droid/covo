@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { modelConfig } from "./config.ts";
+import { modelConfig, providerFromConfig } from "./config.ts";
 import { checkModels } from "./doctor.ts";
 import { MockProvider } from "./mock.ts";
+import { OllamaProvider, ollamaRoot, parseOllamaStream, toOllamaWire } from "./ollama.ts";
 import { OpenAICompatibleProvider, parseStream, toWire } from "./openai-compatible.ts";
 import { collect } from "./types.ts";
 
@@ -194,9 +195,17 @@ test("modelConfig defaults to local Ollama and reads overrides", () => {
   expect(modelConfig({})).toEqual({
     name: "ollama",
     baseUrl: "http://127.0.0.1:11434/v1",
-    model: "qwen3:4b",
+    model: "qwen3.5:4b",
     apiKey: undefined,
+    numCtx: 8192,
+    think: false,
   });
+  expect(modelConfig({ CW_MODEL_CONTEXT: "16384", CW_MODEL_THINK: "on" })).toMatchObject({
+    numCtx: 16384,
+    think: true,
+  });
+  expect(providerFromConfig(modelConfig({})).id).toBe("ollama:qwen3.5:4b");
+  expect(providerFromConfig(modelConfig({})) instanceof OllamaProvider).toBe(true);
   expect(
     modelConfig({ CW_MODEL_BASE_URL: "https://openrouter.ai/api/v1", CW_MODEL: "x/y:free", CW_MODEL_API_KEY: "k" }),
   ).toEqual({
@@ -204,5 +213,78 @@ test("modelConfig defaults to local Ollama and reads overrides", () => {
     baseUrl: "https://openrouter.ai/api/v1",
     model: "x/y:free",
     apiKey: "k",
+  });
+});
+
+describe("Ollama's own API", () => {
+  test("recorded tool call from qwen2.5:1.5b", async () => {
+    const r = await collect(parseOllamaStream(chunks(fixture("ollama-native-tool.ndjson"))));
+    expect(r.stop).toBe("tool");
+    expect(r.toolCalls[0]).toMatchObject({ call: { name: "read_file" }, args: { path: "/path/to/README.md" } });
+    expect(r.usage).toEqual({ tokensIn: 146, tokensOut: 24 });
+  });
+
+  test("recorded text, split at awkward places", async () => {
+    const all = fixture("ollama-native-text.ndjson");
+    const r = await collect(parseOllamaStream(chunks(all.slice(0, 37), all.slice(37, 400), all.slice(400))));
+    expect(r.text.toLowerCase()).toContain("hello there");
+    expect(r.stop).toBe("end");
+  });
+
+  test("thinking stays separate; errors and cut-off replies are reported", async () => {
+    const line = (o: unknown) => `${JSON.stringify(o)}\n`;
+    const r = await collect(
+      parseOllamaStream(
+        chunks(
+          line({ message: { thinking: "hmm" } }),
+          line({ message: { content: "hi" } }),
+          line({ done: true, done_reason: "stop" }),
+        ),
+      ),
+    );
+    expect(r).toMatchObject({ text: "hi", reasoning: "hmm", stop: "end" });
+    expect((await collect(parseOllamaStream(chunks(line({ error: "model 'x' not found" }))))).error).toBe(
+      "model 'x' not found",
+    );
+    expect((await collect(parseOllamaStream(chunks(line({ message: { content: "par" } }))))).stop).toBe("error");
+  });
+
+  test("history goes out with argument objects and tool names", () => {
+    expect(
+      toOllamaWire([
+        { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "read_file", arguments: '{"path":"a"}' }] },
+        { role: "tool", toolCallId: "c1", content: "text" },
+      ]),
+    ).toEqual([
+      { role: "assistant", content: "", tool_calls: [{ function: { name: "read_file", arguments: { path: "a" } } }] },
+      { role: "tool", content: "text", tool_name: "read_file" },
+    ]);
+    expect(ollamaRoot("http://127.0.0.1:11434/v1/")).toBe("http://127.0.0.1:11434");
+  });
+
+  test("asks for an 8K context with thinking off, and retries with thinking for models that need it", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const b = (await req.json()) as Record<string, unknown>;
+        bodies.push(b);
+        if (b.think === false && b.model === "always-thinks") {
+          return Response.json({ error: "model does not support disabling thinking" }, { status: 400 });
+        }
+        return new Response(`${JSON.stringify({ message: { content: "ok" }, done: true, eval_count: 1 })}\n`);
+      },
+    });
+    try {
+      const baseUrl = `http://127.0.0.1:${server.port}/v1`;
+      const r = await collect(new OllamaProvider({ baseUrl, model: "m" }).chat({ messages: [] }));
+      expect(r.text).toBe("ok");
+      expect(bodies[0]).toMatchObject({ model: "m", stream: true, think: false, options: { num_ctx: 8192 } });
+      const t = await collect(new OllamaProvider({ baseUrl, model: "always-thinks" }).chat({ messages: [] }));
+      expect(t.text).toBe("ok");
+      expect(bodies.slice(1).map((b) => b.think)).toEqual([false, true]);
+    } finally {
+      server.stop(true);
+    }
   });
 });

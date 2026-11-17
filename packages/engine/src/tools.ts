@@ -26,8 +26,22 @@ export const TOOL_SPECS: ToolSpec[] = [
     parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
   },
   {
+    name: "edit_file",
+    description:
+      "Change part of an existing text file: replaces old_text with new_text. old_text must match the file exactly, including spaces, and appear only once. Prefer this over write_file for existing files.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        old_text: { type: "string", description: "Exact text to replace, copied from read_file" },
+        new_text: { type: "string", description: "Text to put in its place" },
+      },
+      required: ["path", "old_text", "new_text"],
+    },
+  },
+  {
     name: "write_file",
-    description: "Create or replace a text file in the workspace with the full new content.",
+    description: "Create a new text file, or replace a whole file, with the full content.",
     parameters: {
       type: "object",
       properties: { path: { type: "string" }, content: { type: "string", description: "The complete file content" } },
@@ -85,6 +99,7 @@ export function insideWorkspace(ws: string, p: unknown): string {
 
 const clip = (s: string, n = MAX_RESULT_CHARS) =>
   s.length > n ? `${s.slice(0, n)}\n… (${s.length - n} more characters cut)` : s;
+const countOf = (hay: string, needle: string) => hay.split(needle).length - 1;
 const lines = (s: string) => (s === "" ? 0 : s.split("\n").length - (s.endsWith("\n") ? 1 : 0));
 
 export interface ToolContext {
@@ -145,6 +160,53 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
         const delta = lines(args.content) - (before === null ? 0 : lines(before));
         const label = before === null ? `new, ${lines(args.content)} lines` : `${delta >= 0 ? "+" : ""}${delta} lines`;
         return { ok: true, output: `Wrote ${args.path} (${args.content.length} characters).`, label, mutating: true };
+      }
+      case "edit_file": {
+        const f = insideWorkspace(ctx.ws, args.path);
+        if (typeof args.old_text !== "string" || typeof args.new_text !== "string") {
+          return { ok: false, output: "old_text and new_text must be strings", label: "bad input", mutating: false };
+        }
+        if (!existsSync(f) || !statSync(f).isFile()) {
+          return {
+            ok: false,
+            output: `File not found: ${args.path}. Use write_file to create a new file.`,
+            label: "not found",
+            mutating: false,
+          };
+        }
+        if (args.old_text === "") {
+          return {
+            ok: false,
+            output: "old_text is empty. Copy the exact text to replace from read_file.",
+            label: "bad input",
+            mutating: false,
+          };
+        }
+        const buf = readFileSync(f);
+        if (buf.includes(0))
+          return { ok: false, output: "That file is binary, not text.", label: "binary", mutating: false };
+        const before = buf.toString("utf8");
+        const found = countOf(before, args.old_text);
+        if (found !== 1) {
+          return {
+            ok: false,
+            output:
+              found === 0
+                ? `old_text was not found in ${args.path}. Read the file again and copy the exact text, including spaces and line breaks.`
+                : `old_text appears ${found} times in ${args.path}. Include more of the surrounding text so it matches only once.`,
+            label: found === 0 ? "text not found" : `matches ${found} times`,
+            mutating: false,
+          };
+        }
+        const after = before.replace(args.old_text, () => args.new_text as string);
+        writeFileSync(f, after);
+        const delta = lines(after) - lines(before);
+        return {
+          ok: true,
+          output: `Edited ${args.path}.`,
+          label: `${delta >= 0 ? "+" : ""}${delta} lines`,
+          mutating: true,
+        };
       }
       case "run_command": {
         if (typeof args.command !== "string" || !args.command.trim()) {

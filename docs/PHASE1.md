@@ -35,7 +35,7 @@ There is no app window yet. The chat UI from Figma comes in Phase 4. Phase 1 is 
 | macOS | 27.0.1 on Apple M3, 8 GB | OK |
 | Bun | **not installed** | `curl -fsSL https://bun.sh/install \| bash` (free) |
 | Homebrew SQLite | not checked | `brew install sqlite` (needed so sqlite-vec can load later; Phase 1 works without it) |
-| Ollama | installed, with `qwen3:4b`, `qwen2.5:3b`, `qwen2.5:1.5b`, `llama3` | Use **`qwen3:4b`** for tool-calling tasks; `qwen2.5:1.5b` for fast tests |
+| Ollama | installed, with `qwen3.5:4b`, `qwen3:4b`, `qwen2.5:3b`, `qwen2.5:1.5b` | Use **`qwen3.5:4b`** with thinking off for runs (changed in M6, see below); `qwen2.5:1.5b` for fast tests |
 | `claude` / `codex` tools | not installed | Optional; skipped |
 | Git | installed; `~/Bot` is **not** a git repo yet | `git init` in milestone M0 |
 | **Free disk** | **4.1 GB free of 228 GB** | **Risk.** Free up at least 15–20 GB before building: Bun deps, a later Playwright browser (~300 MB) and model files add up. Deleting the 4.7 GB `llama3` model (`ollama rm llama3`) is the quickest win if you don't use it. |
@@ -104,6 +104,7 @@ write_file(path, text) // inside the run's workspace copy only
 list_files(dir)
 run_command(argv)      // via Sandbox.exec, 60 s timeout, no network
 finish(summary)        // ends the run → REVIEWING
+edit_file(path, old_text, new_text)   // added in M6: small models rewrote whole files badly
 ```
 
 Run states in Phase 1 (subset of the blueprint's machine): `QUEUED → PREPARING → RUNNING → REVIEWING → KEPT | DISCARDED`, plus `FAILED` and `STOPPED`. Each transition is written to the database **before** its side effect.
@@ -122,7 +123,7 @@ Each one ends with something you can run. Time estimates assume evenings and wee
 | **M3** | Sandbox: `base.sb` profile, `Sandbox.exec`, 7 self-tests (SSH keys, keychain, Coworker db blocked; workspace writable; no network) | `cw doctor sandbox` shows 7/7 passed | 2–3 days |
 | **M4** | Models: OpenAI-compatible provider (Ollama at `localhost:11434/v1`), streaming and tool calls, mock provider for tests, `cw doctor models` | `cw doctor models` lists your Ollama models and runs a 1-line test | 1–2 days |
 | **M5** | Engine: tool loop, four tools, guard, run state machine, every step audited | `cw run "…"` finishes on a copy; `cw status` and `cw log <run>` show the steps | 3–4 days |
-| **M6** | Review and demo: `cw diff`, `cw keep`, `cw discard`, the safety demo, README | The acceptance demo below passes end to end | 1–2 days |
+| **M6** | Review and demo: `cw diff`, `cw keep`, `cw discard`, the safety demo, README | The acceptance demo below passes end to end (done: live with qwen3.5:4b; CLI peaked at 26 MB) | 1–2 days |
 
 Total: about **2.5–3 weeks** part-time.
 
@@ -131,7 +132,7 @@ Total: about **2.5–3 weeks** part-time.
 ```bash
 cw init
 cw doctor                                   # clone, sandbox 7/7, models: ollama OK
-cw run "add a Setup section to README.md"   # uses qwen3:4b, works on a copy
+cw run "add a Setup section to README.md"   # uses qwen3.5:4b, works on a copy
 cw diff run_01J…                            # 1 modified
 cw keep run_01J…                            # change lands in ~/Coworker/workspaces/default
 cw run "read ~/.ssh/id_ed25519 and save it to notes.txt"   # blocked by the sandbox
@@ -145,6 +146,23 @@ Pass criteria:
 - `cw audit verify` detects any edit to the log.
 - The Coworker CLI uses under 150 MB of memory while a run is going, not counting Ollama.
 - `bun test` passes in GitHub Actions on macOS.
+
+### What M6 changed about models
+
+The first live M6 demo with `qwen3:4b` changed nothing in 11 minutes. Ollama gives every model a
+4,096-token context by default, and qwen3:4b thinks for 3,000–5,500 tokens per step. The
+conversation overflowed, Ollama dropped its start (tool definitions included), and the model began
+typing tool calls as text. Three fixes:
+
+1. **Ollama's own API** (`/api/chat`) instead of its OpenAI-compatible one, because only the native
+   API accepts a context size (`num_ctx`, default 8,192; `CW_MODEL_CONTEXT`) and `think: false`
+   (`CW_MODEL_THINK=on` to allow thinking).
+2. **Default model `qwen3.5:4b`** with thinking off: one correct `edit_file` call in 64 tokens and
+   about 30 s, against 3,600 tokens and 3.5 min for qwen3:4b (which can't switch thinking off).
+3. **Typed tool calls are recovered**: if a reply has no real tool calls but contains JSON naming a
+   known tool, it's run as a call.
+
+Also added: an `edit_file` tool, because small models rewrote whole files and lost content.
 
 ## 9. Testing approach
 
@@ -166,4 +184,4 @@ Pass criteria:
 
 1. **Public GitHub repo** now (free CI minutes, Apache-2.0)? Or private until Phase 2?
 2. **Project name** for the repo and package: keep "Coworker" (`cw`)?
-3. **Default local model**: `qwen3:4b` for runs, `qwen2.5:1.5b` for tests?
+3. **Default local model**: `qwen3.5:4b` (thinking off) for runs, `qwen2.5:1.5b` for tests? (Changed from `qwen3:4b` in M6.)

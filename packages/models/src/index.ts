@@ -3,6 +3,8 @@ export { DEFAULT_BASE_URL, DEFAULT_MODEL, modelConfig, providerFromConfig } from
 export type { ModelCheck } from "./doctor.ts";
 export { checkModels } from "./doctor.ts";
 export { MockProvider } from "./mock.ts";
+export type { OllamaOptions } from "./ollama.ts";
+export { DEFAULT_CONTEXT, OllamaProvider, parseOllamaStream, toOllamaWire } from "./ollama.ts";
 export type { OpenAICompatibleOptions } from "./openai-compatible.ts";
 export { listModels, OpenAICompatibleProvider, parseStream, toWire } from "./openai-compatible.ts";
 export type {
