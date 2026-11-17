@@ -1,4 +1,6 @@
-import { VERSION } from "@cw/core";
+import { cwHome, VERSION } from "@cw/core";
+import { auditCommand } from "./commands/audit.ts";
+import { initCommand } from "./commands/init.ts";
 
 const HELP = `cw ${VERSION}: Coworker command line
 
@@ -6,19 +8,22 @@ Usage:
   cw <command> [options]
 
 Commands (Phase 1):
-  init            Create ~/Coworker and the default workspace   (M1)
+  init            Create ~/Coworker and the default workspace
+  audit verify    Check the activity log for tampering
   doctor          Check clones, sandbox and models              (M2–M4)
   run "<task>"    Give a bot a task on a safe copy              (M5)
   status          Show runs                                     (M5)
+  log <run>       Show a run's steps                            (M5)
   diff <run>      Show what a run changed                       (M6)
   keep <run>      Keep a run's changes                          (M6)
   discard <run>   Throw a run's changes away                    (M6)
-  log <run>       Show a run's steps                            (M5)
-  audit verify    Check the activity log for tampering          (M1)
 
 Options:
   -h, --help      Show this help
   -v, --version   Show the version
+
+Environment:
+  CW_HOME         Use another data folder instead of ~/Coworker
 `;
 
 export interface CliResult {
@@ -26,9 +31,17 @@ export interface CliResult {
   out: string;
 }
 
-export function main(argv: string[]): CliResult {
-  const [cmd] = argv;
+export interface Ctx {
+  home: string;
+  now: () => number;
+}
+
+export function main(argv: string[], env: Record<string, string | undefined> = process.env): CliResult {
+  const [cmd, ...rest] = argv;
+  const ctx: Ctx = { home: cwHome(env), now: Date.now };
   if (!cmd || cmd === "-h" || cmd === "--help" || cmd === "help") return { code: 0, out: HELP };
   if (cmd === "-v" || cmd === "--version") return { code: 0, out: `${VERSION}\n` };
+  if (cmd === "init") return initCommand(ctx);
+  if (cmd === "audit") return auditCommand(ctx, rest);
   return { code: 2, out: `cw: "${cmd}" isn't available yet. Run "cw --help" to see what's planned.\n` };
 }

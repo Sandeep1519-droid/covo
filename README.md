@@ -31,10 +31,18 @@ bun run cw --help
 
 ```
 apps/cli         the `cw` command
-packages/core    shared types and IDs
+packages/core    shared types, IDs, canonical JSON, data-folder paths
+packages/db      SQLite schema, migrations, tamper-evident activity log
 ```
 
-More packages (`db`, `platform`, `sandbox`, `models`, `engine`) arrive with milestones M1–M5.
+More packages (`platform`, `sandbox`, `models`, `engine`) arrive with milestones M2–M5.
+
+Try it with a throwaway data folder:
+
+```bash
+CW_HOME=/tmp/cw-try bun run cw init
+CW_HOME=/tmp/cw-try bun run cw audit verify
+```
 
 ## License
 

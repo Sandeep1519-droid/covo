@@ -18,11 +18,19 @@
       },
       "dependencies": {
         "@cw/core": "workspace:*",
+        "@cw/db": "workspace:*",
       },
     },
     "packages/core": {
       "name": "@cw/core",
       "version": "0.0.1",
+    },
+    "packages/db": {
+      "name": "@cw/db",
+      "version": "0.0.1",
+      "dependencies": {
+        "@cw/core": "workspace:*",
+      },
     },
   },
   "packages": {
@@ -51,6 +59,8 @@
     "@cw/cli": ["@cw/cli@workspace:apps/cli"],
 
     "@cw/core": ["@cw/core@workspace:packages/core"],
+
+    "@cw/db": ["@cw/db@workspace:packages/db"],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 
