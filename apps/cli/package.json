@@ -1,0 +1,12 @@
+{
+  "name": "@cw/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cw": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cw/core": "workspace:*"
+  }
+}

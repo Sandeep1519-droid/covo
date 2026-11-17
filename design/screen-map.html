@@ -1,0 +1,299 @@
+<title>Coworker Screen Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky area index on the left, screen cards in a single reading column; every button links to the screen it opens. */
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --fg: #1b2230;
+  --muted: #5d677a;
+  --line: #dde1e8;
+  --accent: #2f5bd3;
+  --accent-soft: #e7edfc;
+  --warn: #a35a00;
+  --warn-soft: #fff1dc;
+  --risk: #b42335;
+  --risk-soft: #fde8eb;
+  --ok: #1f7a4d;
+  --ok-soft: #e2f4ea;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --panel: #181e27; --fg: #e3e8f0; --muted: #98a2b4; --line: #2a3240;
+    --accent: #8aa8ff; --accent-soft: #1f2a45; --warn: #f0b35c; --warn-soft: #3a2a12;
+    --risk: #ff8a98; --risk-soft: #3d1b22; --ok: #6fd3a0; --ok-soft: #143225; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --panel: #181e27; --fg: #e3e8f0; --muted: #98a2b4; --line: #2a3240;
+  --accent: #8aa8ff; --accent-soft: #1f2a45; --warn: #f0b35c; --warn-soft: #3a2a12;
+  --risk: #ff8a98; --risk-soft: #3d1b22; --ok: #6fd3a0; --ok-soft: #143225; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 64px;
+}
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 32px; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); } nav.index { position: static !important; max-height: none !important; } }
+
+header.top { max-width: 1180px; margin: 0 auto 28px; }
+header.top h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; letter-spacing: -0.01em; }
+header.top p { margin: 0; color: var(--muted); max-width: 70ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+nav.index { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; max-height: 100vh; overflow-y: auto; padding-block: 4px 24px; font-size: 14px; }
+nav.index .search { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--fg); font: inherit; margin-bottom: 14px; }
+nav.index h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+nav.index ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+nav.index a { display: flex; gap: 8px; text-decoration: none; color: var(--fg); padding: 3px 6px; border-radius: 4px; }
+nav.index a:hover { background: var(--accent-soft); }
+nav.index a .sid { font-family: var(--font-mono); font-size: 12px; color: var(--muted); min-width: 2.6em; padding-top: 1px; }
+
+main { min-width: 0; }
+section.area { margin-bottom: 40px; }
+section.area > h2 { font-size: 21px; margin: 0 0 4px; display: flex; align-items: baseline; gap: 10px; }
+section.area > h2 .tag { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-weight: 500; }
+section.area > p.intro { color: var(--muted); margin: 0 0 16px; max-width: 72ch; }
+
+.journeys { display: grid; gap: 16px; }
+.journey { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.journey h3 { margin: 0 0 10px; font-size: 15px; }
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.steps a { text-decoration: none; background: var(--accent-soft); color: var(--fg); padding: 4px 8px; border-radius: 4px; white-space: nowrap; }
+.steps a b { font-family: var(--font-mono); font-weight: 500; color: var(--accent); margin-right: 4px; }
+.steps .arrow { color: var(--muted); }
+.steps .note { color: var(--muted); font-style: italic; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 14px; scroll-margin-top: 16px; }
+.card:target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.card h3 { margin: 0; font-size: 17px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.card h3 .sid { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--accent); }
+.card .purpose { color: var(--muted); margin: 4px 0 12px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 640px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.cols h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.cols ul { margin: 0; padding-left: 18px; }
+.cols li { margin-bottom: 3px; }
+ul.actions { list-style: none; padding: 0; }
+ul.actions li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin-bottom: 6px; }
+.btn { font-size: 13px; font-weight: 500; border: 1px solid var(--line); border-radius: 5px; padding: 1px 8px; background: var(--bg); white-space: nowrap; }
+.btn.primary { border-color: var(--accent); color: var(--accent); }
+.btn.danger { border-color: var(--risk); color: var(--risk); }
+.go { font-size: 13px; }
+.go a { text-decoration: none; }
+.go a b { font-family: var(--font-mono); font-weight: 500; }
+.go .stay { color: var(--muted); }
+.states { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
+.pill.warn { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+.pill.risk { background: var(--risk-soft); border-color: transparent; color: var(--risk); }
+.pill.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.from { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.from a { text-decoration: none; font-family: var(--font-mono); font-size: 12px; margin-right: 6px; }
+.touch { color: var(--warn); font-size: 12px; font-weight: 600; }
+
+.questions { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; }
+.questions ol { margin: 0; padding-left: 20px; }
+.questions li { margin-bottom: 8px; }
+.empty { color: var(--muted); font-style: italic; }
+</style>
+
+<header class="top">
+  <h1>Coworker Screen Map</h1>
+  <p>Every screen in the app, what it shows, and where each button takes you. Click any arrow to jump to the next screen; each card also lists the screens that lead to it. The app is chat-first: a sidebar of bots and a chat with each one. The full visual design, with clickable links, is in the <a href="https://www.figma.com/design/2BojiBWHbzyglK21UATNBJ" target="_blank" rel="noopener">Figma file</a>.</p>
+  <div class="legend">
+    <span><span class="btn primary">Main action</span></span>
+    <span><span class="btn danger">Destructive</span></span>
+    <span><span class="touch">Touch ID</span> needs your fingerprint</span>
+    <span><span class="pill warn">State</span> other versions of the screen to design</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="index" aria-label="Screens">
+    <label for="filter" class="sr-only" hidden>Filter screens</label>
+    <input id="filter" class="search" type="search" placeholder="Filter screens…" autocomplete="off">
+    <div id="index"></div>
+  </nav>
+  <main id="main">
+    <section class="area" id="journeys">
+      <h2>Key journeys</h2>
+      <p class="intro">The paths people take most often, step by step. Use these to check that the screens connect sensibly before looking at each one.</p>
+      <div class="journeys" id="journey-list"></div>
+    </section>
+    <div id="areas"></div>
+    <section class="area" id="open-questions">
+      <h2>Decisions so far</h2>
+      <div class="questions">
+        <ol>
+          <li><b>Layout:</b> chat-first, like Grok Bot. Departments are sections in the sidebar.</li>
+          <li><b>Look:</b> calm and professional, with both a light theme (Grok-style) and a dark theme, switchable in Settings. Bot characters in 8 shapes and 8 colours.</li>
+          <li><b>Phone:</b> the dashboard opens on your phone over the same Wi-Fi (pair with a QR code), plus Telegram.</li>
+          <li><b>Safety rules:</b> plain English, with the exact rule behind an Advanced switch.</li>
+          <li><b>Menu bar icon:</b> yes.</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const AREAS = [
+  { key: "A", name: "First launch", intro: "A short setup the first time Coworker opens. It ends by creating your main bot, Assistant, and opening a chat with it." },
+  { key: "H", name: "Chats", intro: "The app is a list of bots on the left and a chat on the right. Departments are sections in the sidebar. Clicking a bot's name opens its details panel." },
+  { key: "R", name: "Cards in chat, computer and reviews", intro: "Anything that needs you arrives as a card inside the bot's chat: approvals, file changes, help requests, spending limits and secure forms." },
+  { key: "B", name: "Bots and sections", intro: "Creating bots (shape, colour, name), the details panel tabs, routines, and sections (departments)." },
+  { key: "K", name: "Teach Mode and import", intro: "Showing a bot how to do something once, turning it into a fast tool, and importing skills from other assistants." },
+  { key: "M", name: "Library, memory and log", intro: "Files and pages bots made, what bots learned (with undo), and the tamper-evident activity log." },
+  { key: "S", name: "Settings", intro: "A settings window with tabs. Anything that changes limits, rules or tool permissions needs Touch ID." },
+  { key: "E", name: "System states", intro: "Shown when something is wrong, mostly as a banner or card in the chat." },
+  { key: "C", name: "Telegram", intro: "Messages bots send to your phone, with buttons. Slack and Discord show the same content in their own style." },
+  { key: "T", name: "Terminal (cw)", intro: "The text-based version for people who live in the terminal." },
+  { key: "X", name: "Menu bar and phone", intro: "The Mac menu bar icon, and the dashboard opened on your phone over the same Wi-Fi." },
+];
+const S = [
+  { id: "A1", area: "A", name: "Welcome", purpose: "First screen after installing.", shows: ["Bot character", "Three promises: data stays here, bring your own models, you stay in control"], actions: [["Get started", "A2", "p"], ["Restore from backup", "A8"]] },
+  { id: "A2", area: "A", name: "System check", purpose: "Confirms this Mac can run Coworker safely.", shows: ["Checklist: macOS, APFS, memory (8 GB warning), Touch ID, sandbox self-test"], actions: [["Run checks again", null], ["Continue", "A3", "p"]], states: [["Warning but can continue", "warn"], ["Blocking failure", "risk"]] },
+  { id: "A3", area: "A", name: "Protect your vault", purpose: "Creates the Touch ID key that guards limits, rules and logins.", shows: ["Recovery code to write down", "Confirmation toggle"], actions: [["Set up with Touch ID", "A4", "t"]] },
+  { id: "A4", area: "A", name: "Connect AI models", purpose: "Bring your own keys and subscriptions.", shows: ["Cloud providers with status", "claude tool found on this Mac", "Free local model download", "Terms notice about subscriptions"], actions: [["Add key", "A4a"], ["Continue", "A5", "p"]] },
+  { id: "A4a", area: "A", name: "Add API key (dialog)", purpose: "Paste and test one key.", shows: ["Provider, hidden key field, test result"], actions: [["Cancel", "A4"], ["Test and save", "A4", "p"]] },
+  { id: "A5", area: "A", name: "Spending and safety", purpose: "Starting limits and how often bots ask.", shows: ["Daily and per-task limits", "Careful / Balanced / Trusting"], actions: [["Confirm with Touch ID", "A6", "t"]] },
+  { id: "A6", area: "A", name: "Meet your first bot", purpose: "Create the main bot.", shows: ["Big avatar preview", "8 shapes, 8 colours", "Name"], actions: [["Create", "A7", "p"]] },
+  { id: "A7", area: "A", name: "First chat", purpose: "Assistant introduces itself and offers next steps.", shows: ["Cards: connect Telegram, import from another AI, add bots", "Assistant proposes a new Inbox helper bot"], actions: [["Connect", "S3"], ["Start import", "S1"], ["Browse", "B9"], ["Create bot", "H1", "p"]] },
+  { id: "A8", area: "A", name: "Restore from backup", purpose: "Bring bots, memory and settings from another Mac.", shows: ["What will be restored; keys and logins must be re-entered"], actions: [["Back", "A1"], ["Restore", "A3", "p"]] },
+  { id: "H1", area: "H", name: "Chat with a bot", purpose: "The main screen.", shows: ["Sidebar: Needs you, Library, pinned bot, sections of bots, Settings", "Chat: your message, check-ins with progress chips, an approval card", "Composer with model and spending chips"], actions: [["Allow once", "H1", "p"], ["Always allow", "S9", "t"], ["Details", "R2"], ["Computer", "R6"], ["Bot name", "H3"], ["New bot (+)", "B1"], ["Search", "H5"]] },
+  { id: "H2", area: "H", name: "Bot's first chat", purpose: "Empty chat with starter suggestions.", shows: ["Big avatar, suggestion cards, paused notice"], actions: [["A suggestion", "H1"], ["Morning briefing", "B5"]] },
+  { id: "H3", area: "H", name: "Chat with details panel", purpose: "Click the bot's name to see who it is.", shows: ["Panel: avatar, About / Tools / Routines / Memory tabs, routines, recently learned, tools, spending"], actions: [["Edit look", "B1"], ["Edit personality", "B2"], ["Routine", "B4"], ["Learned item", "B3"], ["More", "B7"]] },
+  { id: "H4", area: "H", name: "Group chat", purpose: "Several bots in one conversation.", shows: ["@mentions, replies from two bots", "Note: approvals and secrets stay in each bot's own chat"], actions: [] },
+  { id: "H5", area: "H", name: "Search and commands", purpose: "Find bots, messages, memory and files, or run a command.", shows: ["Grouped results", "Commands: pause all, new bot, activity log"], actions: [["Billing bot", "R1"], ["Rule", "B3"], ["File", "M1"], ["Pause all", "E4", "d"]] },
+  { id: "H6", area: "H", name: "Needs you", purpose: "Everything waiting on you, from every bot.", shows: ["Tabs: All, Approvals, Help, Changes", "One row per item"], actions: [["Approval", "H1"], ["Payment", "R1"], ["Help", "R5"], ["Changes", "R3"]] },
+  { id: "R1", area: "R", name: "Approval with Touch ID", purpose: "Money and identity actions.", shows: ["Payment card: payee, amount, vault card, invoice", "Warning when amount is unusual"], actions: [["Approve with Touch ID", null, "t"], ["Deny", null, "d"], ["Details", "R2"]] },
+  { id: "R2", area: "R", name: "Approval details (dialog)", purpose: "What will happen, the exact request, and why you're asked.", shows: ["Affected items", "Exact request", "Rule that triggered it; untrusted-content warning"], actions: [["Deny and add a rule", "S5"], ["Deny", "H1", "d"], ["Allow once", "H1", "p"]] },
+  { id: "R3", area: "R", name: "Changes ready", purpose: "A bot finished with file changes.", shows: ["Card with the changed files"], actions: [["Review changes", "R4", "p"], ["Keep all", null], ["Discard", null, "d"]] },
+  { id: "R4", area: "R", name: "Review changes", purpose: "See what changed before keeping it.", shows: ["Counts, file list with toggles, diff"], actions: [["Discard all", "R3", "d"], ["Keep selected", "R3"], ["Keep all changes", "R3", "p"]], states: [["Conflicts", "risk"]] },
+  { id: "R5", area: "R", name: "Help needed", purpose: "Login, 2FA or CAPTCHA.", shows: ["Help card with time left"], actions: [["Take over", "R6", "p"], ["Cancel task", null, "d"]] },
+  { id: "R6", area: "R", name: "Computer view and take over", purpose: "Watch the bot's screen and drive it yourself.", shows: ["Narrow chat on the left, live browser on the right", "Bot locked out while you drive"], actions: [["Hand back", "R5", "p"]] },
+  { id: "R7", area: "R", name: "Stuck and rolled back", purpose: "Watchdog stopped a looping task.", shows: ["What happened, progress, cost; working copy discarded"], actions: [["Try again with Claude API", "R5", "p"], ["See what happened", "M3"]] },
+  { id: "R8", area: "R", name: "Spending limit reached", purpose: "A limit paused the work.", shows: ["Limit and amount needed"], actions: [["Allow $0.50 more", "S9", "t"], ["Change limits", "S6"]] },
+  { id: "R9", area: "R", name: "Save a login securely", purpose: "Secure form inside the chat.", shows: ["Email and password fields; goes straight to the vault"], actions: [["Save with Touch ID", "R5", "t"]] },
+  { id: "B1", area: "B", name: "New bot (dialog)", purpose: "Shape, colour, name, section, or a suggestion.", shows: ["Avatar preview, 8 shapes, 8 colours, suggestions"], actions: [["Browse all templates", "B9"], ["Create", "H2", "p"]] },
+  { id: "B2", area: "B", name: "Details: personality", purpose: "Who the bot is. Only you can edit it.", shows: ["Persona text, restore earlier version"], actions: [["Save", "H3", "p"]] },
+  { id: "B3", area: "B", name: "Details: memory and rules", purpose: "Learned items to review; your locked rules.", shows: ["Learned items with Keep", "Locked rules"], actions: [["Undo a change", "M2"], ["Full history", "M2"]] },
+  { id: "B4", area: "B", name: "Details: routines", purpose: "Scheduled jobs for this bot.", shows: ["Routines with on/paused state"], actions: [["Routine", "B5"], ["New routine", "B5"]] },
+  { id: "B5", area: "B", name: "Routine editor (dialog)", purpose: "When, what, limits, last runs.", shows: ["Schedule, instructions, limit, model, last runs"], actions: [["Delete", "B4", "d"], ["Test now", "H3"], ["Save", "B4", "p"]] },
+  { id: "B6", area: "B", name: "Details: tools", purpose: "What the bot may use: Allow, Ask me, Never.", shows: ["Tools with permission pills", "Allowed websites"], actions: [["Change with Touch ID", "S9", "t"]] },
+  { id: "B7", area: "B", name: "Bot menu", purpose: "Right-click a bot.", shows: ["Change look, pin, move to section, share as template, hide, pause routines, delete"], actions: [["Change look", "B1"], ["Move to section", "B8"], ["Share as template", "B9"]] },
+  { id: "B8", area: "B", name: "New section (dialog)", purpose: "A department with its own workspace, logins and websites.", shows: ["Name, folder, allowed websites"], actions: [["Create with Touch ID", "H1", "t"]] },
+  { id: "B9", area: "B", name: "Bot templates", purpose: "Ready-made bots.", shows: ["Tabs and template cards"], actions: [["Add", "B1"], ["Import from a folder", "K3"]] },
+  { id: "K1", area: "K", name: "Teach Mode recording", purpose: "Show a bot how to do something once.", shows: ["Captured steps and requests", "Your screen, recording"], actions: [["Stop and build tool", "K2", "p"]] },
+  { id: "K2", area: "K", name: "Review taught tool (dialog)", purpose: "Check the tool built from your recordings.", shows: ["Inputs table, safety checks, login stays in vault"], actions: [["Run one real test", "R2"], ["Enable with Touch ID", "S9", "t"]] },
+  { id: "K3", area: "K", name: "Import bots and skills (dialog)", purpose: "Bring skills from Claude Code, OpenClaw or Hermes.", shows: ["What was found and what it becomes; everything off until reviewed"], actions: [["Import as drafts", "B9", "p"]] },
+  { id: "M1", area: "M", name: "Library", purpose: "Files and pages bots made.", shows: ["Pinned pages, recent files"], actions: [] },
+  { id: "M2", area: "M", name: "Memory history", purpose: "What bots learned, with undo.", shows: ["Timeline by day", "Detail: why, expiry, before/after"], actions: [["Undo this change", "M2", "d"], ["Lock as a rule", "B3"], ["Open the chat", "H1"]] },
+  { id: "M3", area: "M", name: "Activity log", purpose: "Every action and decision.", shows: ["Integrity banner, filters, entries with decisions"], actions: [["Verify now", null], ["Export", null]] },
+  { id: "S1", area: "S", name: "Settings: General", purpose: "Startup, menu bar, import, backup.", shows: ["Import prompt and paste box", "Backup"], actions: [["Restore from backup", "A8"]] },
+  { id: "S2", area: "S", name: "Settings: AI models and keys", purpose: "Your keys and which model does what.", shows: ["Providers, routing, subscription toggle for routines"], actions: [["Add key", "A4a"]] },
+  { id: "S3", area: "S", name: "Settings: Connect apps", purpose: "Telegram, Slack, Discord, and phone access.", shows: ["Chat apps", "QR code to pair a phone on the same Wi-Fi"], actions: [] },
+  { id: "S4", area: "S", name: "Settings: Vault", purpose: "Logins, cards, contact info, payments.", shows: ["Logins with which bots may use them"], actions: [["Add login", "R9"]] },
+  { id: "S5", area: "S", name: "Settings: Auto review", purpose: "Rules in plain English, with the exact rule behind Advanced.", shows: ["Unconfirmed changes banner", "Rules with Ask / Block / Touch ID"], actions: [["Confirm changes", "S9", "t"]] },
+  { id: "S6", area: "S", name: "Settings: Spending", purpose: "What's been spent and the limits.", shows: ["Totals, 14-day chart, limits table"], actions: [["Confirm with Touch ID", "S9", "t"]] },
+  { id: "S7", area: "S", name: "Settings: Computer", purpose: "Health of this Mac and the sandbox.", shows: ["Self-test, vault, log, memory, temperature, workspaces"], actions: [] },
+  { id: "S8", area: "S", name: "Settings: Notifications", purpose: "What reaches you, and quiet hours.", shows: ["Toggles per kind of message"], actions: [] },
+  { id: "S9", area: "S", name: "Sign changes (dialog)", purpose: "Confirm limit, rule or permission changes.", shows: ["Every pending change in plain words"], actions: [["Discard", "S5", "d"], ["Confirm with Touch ID", "H1", "t"]] },
+  { id: "E1", area: "E", name: "Safe mode", purpose: "Rules file changed outside Coworker.", shows: ["Red banner; bots can read only"], actions: [["Re-confirm rules", "S5", "t"], ["Open activity log", "M3"]] },
+  { id: "E2", area: "E", name: "No model available", purpose: "Every model failed or hit a limit.", shows: ["Why each model failed"], actions: [["Change limits", "S6"], ["Fix keys", "S2"]] },
+  { id: "E3", area: "E", name: "Coworker isn't running", purpose: "The app can't reach the background service.", shows: ["Command to start it"], actions: [["Try again", "H1", "p"]] },
+  { id: "E4", area: "E", name: "All bots paused", purpose: "After Pause all.", shows: ["Banner and queued tasks"], actions: [["Resume all bots", "A7", "p"]] },
+  { id: "C1", area: "C", name: "Progress update", purpose: "One message that updates in place.", shows: ["Step, note, time and cost"], actions: [["Stop", null, "d"]] },
+  { id: "C2", area: "C", name: "Approval request", purpose: "Approve from your phone.", shows: ["Payments say approve on your Mac"], actions: [["Allow once", null, "p"], ["Details", "R2"]] },
+  { id: "C3", area: "C", name: "Help needed", purpose: "Reply with a 2FA code or take over.", shows: ["You can reply with the code"], actions: [["Take over", "X4"]] },
+  { id: "C4", area: "C", name: "Changes ready", purpose: "Keep or discard from your phone.", shows: ["Summary of changed files"], actions: [["Review on Mac", "R4"]] },
+  { id: "C5", area: "C", name: "Daily summary", purpose: "Evening digest.", shows: ["Done, spent, learned"], actions: [["Review what bots learned", "M2"]] },
+  { id: "T1", area: "T", name: "cw status", purpose: "Overview in the terminal.", shows: ["Running, waiting on you, health"], actions: [["a: approvals", "T3"]] },
+  { id: "T2", area: "T", name: "cw chat", purpose: "Talk to a bot and watch it work.", shows: ["Streaming steps, inline approval, change summary"], actions: [] },
+  { id: "T3", area: "T", name: "cw approve", purpose: "Approve or deny waiting items.", shows: ["List with keyboard keys"], actions: [] },
+  { id: "X1", area: "X", name: "Menu bar", purpose: "Always-visible status on the Mac.", shows: ["Needs you, running, spend"], actions: [["Open", "A7", "p"], ["New bot", "B1"], ["Pause all", "E4", "d"]] },
+  { id: "X2", area: "X", name: "Phone: bots", purpose: "The bot list on your phone (same Wi-Fi).", shows: ["Bots with what needs you"], actions: [["A bot", "X3"], ["Research assistant", "X4"]] },
+  { id: "X3", area: "X", name: "Phone: approval", purpose: "Approve inside a bot's chat on the phone.", shows: ["Approval card"], actions: [["Allow once", "X2", "p"], ["Deny", "X2"]] },
+  { id: "X4", area: "X", name: "Phone: take over", purpose: "Finish a login from your phone.", shows: ["Live browser"], actions: [["Hand back", "X2", "p"]] },
+];
+const JOURNEYS = [
+  { name: "First launch", steps: ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "H1"] },
+  { name: "Ask a bot and approve a risky step", steps: ["H1", "R2", "H1"] },
+  { name: "Keep a bot's file changes", steps: ["R3", "R4", "R3"] },
+  { name: "Bot stuck at a login", steps: ["R5", "R6", "R5"], note: "Or reply with the code in Telegram (C3)" },
+  { name: "Teach a new tool", steps: ["K1", "K2", "S9"] },
+  { name: "Undo something a bot learned", steps: ["C5", "M2"] },
+  { name: "Approve from your phone", steps: ["X2", "X3", "X2"] },
+];
+
+const byId = Object.fromEntries(S.map(s => [s.id, s]));
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const anchor = id => "scr-" + id.toLowerCase();
+
+// back-links
+const from = {};
+for (const s of S) for (const [, t] of s.actions) if (t) (from[t] ||= new Set()).add(s.id);
+for (const j of JOURNEYS) j.steps.forEach((id, i) => { if (i) (from[id] ||= new Set()).add(j.steps[i - 1]); });
+
+function link(id) {
+  const t = byId[id];
+  return t ? `<a href="#${anchor(id)}"><b>${id}</b> ${esc(t.name)}</a>` : esc(id);
+}
+
+function card(s) {
+  const acts = s.actions.length ? s.actions.map(([label, target, style, note]) => {
+    const cls = style === "p" ? "btn primary" : style === "d" ? "btn danger" : "btn";
+    const touch = style === "t" ? ` <span class="touch">Touch ID</span>` : "";
+    const go = target ? `→ ${link(target)}` : `<span class="stay">${esc(note || "stays on this screen")}</span>`;
+    const extra = target && note ? ` <span class="stay">(${esc(note)})</span>` : "";
+    return `<li><span class="${cls}">${esc(label)}</span>${touch}<span class="go">${go}${extra}</span></li>`;
+  }).join("") : `<li class="empty">Read only</li>`;
+  const states = s.states ? `<div class="states">${s.states.map(([t, k]) => `<span class="pill ${k}">${esc(t)}</span>`).join("")}</div>` : "";
+  const f = from[s.id] ? `<div class="from">Reached from: ${[...from[s.id]].sort().map(x => `<a href="#${anchor(x)}">${x}</a>`).join("")}</div>` : "";
+  return `<article class="card" id="${anchor(s.id)}" data-text="${esc((s.id + " " + s.name + " " + s.purpose).toLowerCase())}">
+    <h3><span class="sid">${s.id}</span>${esc(s.name)}</h3>
+    <p class="purpose">${esc(s.purpose)}</p>
+    <div class="cols">
+      <div><h4>Shows</h4><ul>${s.shows.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>
+      <div><h4>Buttons and where they go</h4><ul class="actions">${acts}</ul></div>
+    </div>${states}${f}
+  </article>`;
+}
+
+document.getElementById("areas").innerHTML = AREAS.map(a => {
+  const list = S.filter(s => s.area === a.key);
+  return `<section class="area" id="area-${a.key.toLowerCase()}">
+    <h2>${esc(a.name)} <span class="tag">${a.key} · ${list.length} screens</span></h2>
+    <p class="intro">${esc(a.intro)}</p>${list.map(card).join("")}</section>`;
+}).join("");
+
+document.getElementById("journey-list").innerHTML = JOURNEYS.map(j => `
+  <div class="journey"><h3>${esc(j.name)}</h3>
+  <div class="steps">${j.steps.map(id => `<a href="#${anchor(id)}"><b>${id}</b>${esc(byId[id].name)}</a>`).join('<span class="arrow">→</span>')}</div>
+  ${j.note ? `<div class="steps" style="margin-top:8px"><span class="note">${esc(j.note)}</span></div>` : ""}</div>`).join("");
+
+document.getElementById("index").innerHTML =
+  `<h2>Overview</h2><ol><li><a href="#journeys"><span class="sid">↳</span>Key journeys</a></li><li><a href="#open-questions"><span class="sid">✓</span>Decisions so far</a></li></ol>` +
+  AREAS.map(a => `<h2>${esc(a.name)}</h2><ol>${S.filter(s => s.area === a.key).map(s =>
+    `<li data-text="${esc((s.id + " " + s.name).toLowerCase())}"><a href="#${anchor(s.id)}"><span class="sid">${s.id}</span>${esc(s.name)}</a></li>`).join("")}</ol>`).join("");
+
+document.getElementById("filter").addEventListener("input", e => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll("#index li[data-text], .card").forEach(el => {
+    el.hidden = q && !el.dataset.text.includes(q);
+  });
+});
+</script>
