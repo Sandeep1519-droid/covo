@@ -1,10 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cwPaths } from "@cw/core";
-import { appendAudit, migrate, openDb } from "@cw/db";
-import { cloner, type WorkspaceCloner } from "@cw/platform";
-import { type Change, type Conflict, CowWorkspaces, type Hunk, unifiedDiff } from "@cw/sandbox";
+import { covoPaths } from "@covo/core";
+import { appendAudit, migrate, openDb } from "@covo/db";
+import { cloner, type WorkspaceCloner } from "@covo/platform";
+import { type Change, type Conflict, CowWorkspaces, type Hunk, unifiedDiff } from "@covo/sandbox";
 import { RunError } from "./run.ts";
 import { type RunState, recordState } from "./state.ts";
 
@@ -57,8 +57,8 @@ function withRun<T>(
   fn: (db: Database, run: RunRow, cow: CowWorkspaces) => T,
   clone?: WorkspaceCloner,
 ): T {
-  const paths = cwPaths(home);
-  if (!existsSync(paths.db)) throw new RunError("Coworker isn't set up yet. Run: cw init");
+  const paths = covoPaths(home);
+  if (!existsSync(paths.db)) throw new RunError("Covo isn't set up yet. Run: covo init");
   const db = openDb(paths.db);
   try {
     migrate(db, now);

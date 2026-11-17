@@ -7,11 +7,11 @@ import type { ExecResult, Sandbox, SandboxOptions } from "../index.ts";
 //   - reading the operating system, Homebrew and developer tools (system folders only, never your home folder)
 //   - reading and writing the run's own workspace copy and temp folder
 //   - running programs and signalling processes inside the same sandbox
-// Network access is denied. Your home folder (SSH keys, keychains, documents, Coworker's own data)
+// Network access is denied. Your home folder (SSH keys, keychains, documents, Covo's own data)
 // is invisible except for the run's workspace copy and any read-only folders passed in.
 //
 // sandbox-exec is marked deprecated by Apple but is still shipped and used by Apple, browsers and
-// developer tools. `cw doctor sandbox` re-checks the behaviour on every machine and macOS update.
+// developer tools. `covo doctor sandbox` re-checks the behaviour on every machine and macOS update.
 
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
 const MAX_OUTPUT = 200_000;

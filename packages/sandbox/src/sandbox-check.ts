@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type ExecResult, type Sandbox, sandbox } from "@cw/platform";
+import { type ExecResult, type Sandbox, sandbox } from "@covo/platform";
 
 export interface SandboxCheck {
   name: string;
@@ -12,7 +12,7 @@ export interface SandboxCheck {
 export interface SandboxCheckOptions {
   /** Folder for the throwaway test workspace (removed afterwards). */
   scratchDir: string;
-  /** Coworker's database, which commands must not be able to read. */
+  /** Covo's database, which commands must not be able to read. */
   dbPath: string;
   home?: string;
   sandbox?: Sandbox;
@@ -33,8 +33,8 @@ export async function checkSandbox(o: SandboxCheckOptions): Promise<SandboxCheck
   mkdirSync(workspace, { recursive: true });
   mkdirSync(tmp, { recursive: true });
   const run = (...argv: string[]) => sb.exec(argv, { workspace, tmp, timeoutMs: 15_000 });
-  const escapeFile = `/private/tmp/cw-sandbox-escape-${process.pid}`;
-  const desktopFile = join(home, "Desktop", `cw-sandbox-escape-${process.pid}`);
+  const escapeFile = `/private/tmp/covo-sandbox-escape-${process.pid}`;
+  const desktopFile = join(home, "Desktop", `covo-sandbox-escape-${process.pid}`);
 
   const blocked = async (name: string, paths: string[], argv: (p: string) => string[]): Promise<SandboxCheck> => {
     const present = paths.filter((p) => existsSync(p));
@@ -62,9 +62,9 @@ export async function checkSandbox(o: SandboxCheckOptions): Promise<SandboxCheck
         (p) => ["/bin/ls", p],
       ),
     );
-    checks.push(await blocked("Coworker's own data is hidden", [o.dbPath], (p) => ["/bin/cat", p]));
+    checks.push(await blocked("Covo's own data is hidden", [o.dbPath], (p) => ["/bin/cat", p]));
 
-    const w = await run("/bin/sh", "-c", "echo ok > .cw-check && cat .cw-check");
+    const w = await run("/bin/sh", "-c", "echo ok > .covo-check && cat .covo-check");
     checks.push(
       w.code === 0 && w.stdout.trim() === "ok"
         ? { name: "Workspace copy is writable", status: "pass", detail: "Created and read a file" }

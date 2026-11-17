@@ -2,16 +2,16 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cwPaths } from "@cw/core";
-import { initHome, openDb, verifyAudit } from "@cw/db";
-import { MockProvider } from "@cw/models";
+import { covoPaths } from "@covo/core";
+import { initHome, openDb, verifyAudit } from "@covo/db";
+import { MockProvider } from "@covo/models";
 import { discardRun, keepRun, reviewRun } from "./review.ts";
 import { startRun } from "./run.ts";
 
 let home: string;
 let wsDir: string;
 beforeEach(() => {
-  home = join(realpathSync(mkdtempSync(join(tmpdir(), "cw-review-"))), "Coworker");
+  home = join(realpathSync(mkdtempSync(join(tmpdir(), "covo-review-"))), "Covo");
   initHome(home);
   wsDir = join(home, "workspaces/default");
   writeFileSync(join(wsDir, "README.md"), "# Project\n\nHello.\n");
@@ -32,7 +32,7 @@ const run = () =>
   });
 
 const stateOf = (id: string) => {
-  const db = openDb(cwPaths(home).db);
+  const db = openDb(covoPaths(home).db);
   const s = db.query<{ state: string }, [string]>("SELECT state FROM runs WHERE id = ?").get(id)?.state;
   db.close();
   return s;
@@ -60,10 +60,10 @@ test("keep copies every change into the workspace and records it", async () => {
   expect(readFileSync(join(wsDir, "docs/new.md"), "utf8")).toBe("new\n");
   expect(existsSync(join(wsDir, "old.txt"))).toBe(false);
   expect(stateOf(r.runId)).toBe("KEPT");
-  expect(existsSync(join(cwPaths(home).runs, r.runId, "ws"))).toBe(false);
-  expect(existsSync(join(cwPaths(home).runs, r.runId, "transcript.jsonl"))).toBe(true);
+  expect(existsSync(join(covoPaths(home).runs, r.runId, "ws"))).toBe(false);
+  expect(existsSync(join(covoPaths(home).runs, r.runId, "transcript.jsonl"))).toBe(true);
 
-  const db = openDb(cwPaths(home).db);
+  const db = openDb(covoPaths(home).db);
   const keep = db
     .query<{ detail_json: string }, [string]>(
       "SELECT detail_json FROM audit_log WHERE run_id = ? AND action = 'run.keep'",
@@ -113,6 +113,6 @@ test("discard throws the copy away and leaves the workspace alone", async () => 
   expect(discardRun(home, r.runId)).toEqual({ runId: r.runId, files: 3 });
   expect(stateOf(r.runId)).toBe("DISCARDED");
   expect(readFileSync(join(wsDir, "README.md"), "utf8")).toBe("# Project\n\nHello.\n");
-  expect(existsSync(join(cwPaths(home).runs, r.runId, "ws"))).toBe(false);
+  expect(existsSync(join(covoPaths(home).runs, r.runId, "ws"))).toBe(false);
   expect(() => reviewRun(home, r.runId)).toThrow("already thrown away");
 });

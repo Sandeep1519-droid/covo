@@ -1,4 +1,4 @@
-<title>Coworker Screen Map</title>
+<title>Covo Bot Screen Map</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -111,7 +111,7 @@ ul.actions li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: basel
 </style>
 
 <header class="top">
-  <h1>Coworker Screen Map</h1>
+  <h1>Covo Bot Screen Map</h1>
   <p>Every screen in the app, what it shows, and where each button takes you. Click any arrow to jump to the next screen; each card also lists the screens that lead to it. The app is chat-first: a sidebar of bots and a chat with each one. The full visual design, with clickable links, is in the <a href="https://www.figma.com/design/2BojiBWHbzyglK21UATNBJ" target="_blank" rel="noopener">Figma file</a>.</p>
   <div class="legend">
     <span><span class="btn primary">Main action</span></span>
@@ -151,7 +151,7 @@ ul.actions li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: basel
 
 <script>
 const AREAS = [
-  { key: "A", name: "First launch", intro: "A short setup the first time Coworker opens. It ends by creating your main bot, Assistant, and opening a chat with it." },
+  { key: "A", name: "First launch", intro: "A short setup the first time Covo opens. It ends by creating your main bot, Assistant, and opening a chat with it." },
   { key: "H", name: "Chats", intro: "The app is a list of bots on the left and a chat on the right. Departments are sections in the sidebar. Clicking a bot's name opens its details panel." },
   { key: "R", name: "Cards in chat, computer and reviews", intro: "Anything that needs you arrives as a card inside the bot's chat: approvals, file changes, help requests, spending limits and secure forms." },
   { key: "B", name: "Bots and sections", intro: "Creating bots (shape, colour, name), the details panel tabs, routines, and sections (departments)." },
@@ -160,12 +160,12 @@ const AREAS = [
   { key: "S", name: "Settings", intro: "A settings window with tabs. Anything that changes limits, rules or tool permissions needs Touch ID." },
   { key: "E", name: "System states", intro: "Shown when something is wrong, mostly as a banner or card in the chat." },
   { key: "C", name: "Telegram", intro: "Messages bots send to your phone, with buttons. Slack and Discord show the same content in their own style." },
-  { key: "T", name: "Terminal (cw)", intro: "The text-based version for people who live in the terminal." },
+  { key: "T", name: "Terminal (covo)", intro: "The text-based version for people who live in the terminal." },
   { key: "X", name: "Menu bar and phone", intro: "The Mac menu bar icon, and the dashboard opened on your phone over the same Wi-Fi." },
 ];
 const S = [
   { id: "A1", area: "A", name: "Welcome", purpose: "First screen after installing.", shows: ["Bot character", "Three promises: data stays here, bring your own models, you stay in control"], actions: [["Get started", "A2", "p"], ["Restore from backup", "A8"]] },
-  { id: "A2", area: "A", name: "System check", purpose: "Confirms this Mac can run Coworker safely.", shows: ["Checklist: macOS, APFS, memory (8 GB warning), Touch ID, sandbox self-test"], actions: [["Run checks again", null], ["Continue", "A3", "p"]], states: [["Warning but can continue", "warn"], ["Blocking failure", "risk"]] },
+  { id: "A2", area: "A", name: "System check", purpose: "Confirms this Mac can run Covo safely.", shows: ["Checklist: macOS, APFS, memory (8 GB warning), Touch ID, sandbox self-test"], actions: [["Run checks again", null], ["Continue", "A3", "p"]], states: [["Warning but can continue", "warn"], ["Blocking failure", "risk"]] },
   { id: "A3", area: "A", name: "Protect your vault", purpose: "Creates the Touch ID key that guards limits, rules and logins.", shows: ["Recovery code to write down", "Confirmation toggle"], actions: [["Set up with Touch ID", "A4", "t"]] },
   { id: "A4", area: "A", name: "Connect AI models", purpose: "Bring your own keys and subscriptions.", shows: ["Cloud providers with status", "claude tool found on this Mac", "Free local model download", "Terms notice about subscriptions"], actions: [["Add key", "A4a"], ["Continue", "A5", "p"]] },
   { id: "A4a", area: "A", name: "Add API key (dialog)", purpose: "Paste and test one key.", shows: ["Provider, hidden key field, test result"], actions: [["Cancel", "A4"], ["Test and save", "A4", "p"]] },
@@ -212,18 +212,18 @@ const S = [
   { id: "S7", area: "S", name: "Settings: Computer", purpose: "Health of this Mac and the sandbox.", shows: ["Self-test, vault, log, memory, temperature, workspaces"], actions: [] },
   { id: "S8", area: "S", name: "Settings: Notifications", purpose: "What reaches you, and quiet hours.", shows: ["Toggles per kind of message"], actions: [] },
   { id: "S9", area: "S", name: "Sign changes (dialog)", purpose: "Confirm limit, rule or permission changes.", shows: ["Every pending change in plain words"], actions: [["Discard", "S5", "d"], ["Confirm with Touch ID", "H1", "t"]] },
-  { id: "E1", area: "E", name: "Safe mode", purpose: "Rules file changed outside Coworker.", shows: ["Red banner; bots can read only"], actions: [["Re-confirm rules", "S5", "t"], ["Open activity log", "M3"]] },
+  { id: "E1", area: "E", name: "Safe mode", purpose: "Rules file changed outside Covo.", shows: ["Red banner; bots can read only"], actions: [["Re-confirm rules", "S5", "t"], ["Open activity log", "M3"]] },
   { id: "E2", area: "E", name: "No model available", purpose: "Every model failed or hit a limit.", shows: ["Why each model failed"], actions: [["Change limits", "S6"], ["Fix keys", "S2"]] },
-  { id: "E3", area: "E", name: "Coworker isn't running", purpose: "The app can't reach the background service.", shows: ["Command to start it"], actions: [["Try again", "H1", "p"]] },
+  { id: "E3", area: "E", name: "Covo isn't running", purpose: "The app can't reach the background service.", shows: ["Command to start it"], actions: [["Try again", "H1", "p"]] },
   { id: "E4", area: "E", name: "All bots paused", purpose: "After Pause all.", shows: ["Banner and queued tasks"], actions: [["Resume all bots", "A7", "p"]] },
   { id: "C1", area: "C", name: "Progress update", purpose: "One message that updates in place.", shows: ["Step, note, time and cost"], actions: [["Stop", null, "d"]] },
   { id: "C2", area: "C", name: "Approval request", purpose: "Approve from your phone.", shows: ["Payments say approve on your Mac"], actions: [["Allow once", null, "p"], ["Details", "R2"]] },
   { id: "C3", area: "C", name: "Help needed", purpose: "Reply with a 2FA code or take over.", shows: ["You can reply with the code"], actions: [["Take over", "X4"]] },
   { id: "C4", area: "C", name: "Changes ready", purpose: "Keep or discard from your phone.", shows: ["Summary of changed files"], actions: [["Review on Mac", "R4"]] },
   { id: "C5", area: "C", name: "Daily summary", purpose: "Evening digest.", shows: ["Done, spent, learned"], actions: [["Review what bots learned", "M2"]] },
-  { id: "T1", area: "T", name: "cw status", purpose: "Overview in the terminal.", shows: ["Running, waiting on you, health"], actions: [["a: approvals", "T3"]] },
-  { id: "T2", area: "T", name: "cw chat", purpose: "Talk to a bot and watch it work.", shows: ["Streaming steps, inline approval, change summary"], actions: [] },
-  { id: "T3", area: "T", name: "cw approve", purpose: "Approve or deny waiting items.", shows: ["List with keyboard keys"], actions: [] },
+  { id: "T1", area: "T", name: "covo status", purpose: "Overview in the terminal.", shows: ["Running, waiting on you, health"], actions: [["a: approvals", "T3"]] },
+  { id: "T2", area: "T", name: "covo chat", purpose: "Talk to a bot and watch it work.", shows: ["Streaming steps, inline approval, change summary"], actions: [] },
+  { id: "T3", area: "T", name: "covo approve", purpose: "Approve or deny waiting items.", shows: ["List with keyboard keys"], actions: [] },
   { id: "X1", area: "X", name: "Menu bar", purpose: "Always-visible status on the Mac.", shows: ["Needs you, running, spend"], actions: [["Open", "A7", "p"], ["New bot", "B1"], ["Pause all", "E4", "d"]] },
   { id: "X2", area: "X", name: "Phone: bots", purpose: "The bot list on your phone (same Wi-Fi).", shows: ["Bots with what needs you"], actions: [["A bot", "X3"], ["Research assistant", "X4"]] },
   { id: "X3", area: "X", name: "Phone: approval", purpose: "Approve inside a bot's chat on the phone.", shows: ["Approval card"], actions: [["Allow once", "X2", "p"], ["Deny", "X2"]] },

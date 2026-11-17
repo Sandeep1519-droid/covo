@@ -10,8 +10,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { canonicalJson, sha256Hex } from "@cw/core";
-import { type CloneMethod, cloner, type WorkspaceCloner } from "@cw/platform";
+import { canonicalJson, sha256Hex } from "@covo/core";
+import { type CloneMethod, cloner, type WorkspaceCloner } from "@covo/platform";
 import { buildManifest, type Entry, type EntryKind, entryAt, type Manifest, sameMeta } from "./manifest.ts";
 
 // Copy-on-write workspaces.
@@ -161,7 +161,7 @@ export class CowWorkspaces {
         continue;
       }
       mkdirSync(dirname(dst), { recursive: true });
-      const tmp = `${dst}.cw-tmp-${process.pid}`;
+      const tmp = `${dst}.covo-tmp-${process.pid}`;
       if (e.kind === "symlink") symlinkSync(e.link as string, tmp);
       else this.clone.cloneFile(src, tmp);
       renameSync(tmp, dst); // atomic replace: readers see the old file or the new one, never half

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { canonicalJson, sha256Hex } from "@cw/core";
+import { canonicalJson, sha256Hex } from "@covo/core";
 
 // Tamper-evident activity log.
 //

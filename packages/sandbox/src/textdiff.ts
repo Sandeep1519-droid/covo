@@ -1,4 +1,4 @@
-// Line-based unified diff (Myers' O(ND) algorithm), so `cw diff` needs no external tools and works
+// Line-based unified diff (Myers' O(ND) algorithm), so `covo diff` needs no external tools and works
 // the same on macOS and, later, Windows.
 
 export type Op = { kind: "same" | "del" | "add"; line: string };

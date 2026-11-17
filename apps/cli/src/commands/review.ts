@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import { cwPaths, tildify } from "@cw/core";
-import { openDb } from "@cw/db";
-import { discardRun, keepRun, RunError, reviewRun } from "@cw/engine";
+import { covoPaths, tildify } from "@covo/core";
+import { openDb } from "@covo/db";
+import { discardRun, keepRun, RunError, reviewRun } from "@covo/engine";
 import type { CliResult, Ctx } from "../main.ts";
 import { findRun } from "./runs.ts";
 
-// cw diff / keep / discard: the review step. Nothing reaches your workspace until you keep it.
+// covo diff / keep / discard: the review step. Nothing reaches your workspace until you keep it.
 
 const REASON = {
   "changed-in-workspace": "you changed it after the run started",
@@ -14,8 +14,8 @@ const REASON = {
 } as const;
 
 function resolveRun(ctx: Ctx, arg: string | undefined): string | CliResult {
-  const { db: path } = cwPaths(ctx.home);
-  if (!existsSync(path)) return { code: 1, out: `Coworker isn't set up in ${tildify(ctx.home)} yet. Run: cw init\n` };
+  const { db: path } = covoPaths(ctx.home);
+  if (!existsSync(path)) return { code: 1, out: `Covo isn't set up in ${tildify(ctx.home)} yet. Run: covo init\n` };
   const db = openDb(path);
   try {
     const id = findRun(db, arg);
@@ -70,7 +70,7 @@ export function diffCommand(ctx: Ctx, args: string[]): CliResult {
       out.push("");
     }
     if (stat) out.push("");
-    out.push(`Keep all: cw keep ${id}   Keep some: cw keep ${id} <file>…   Throw away: cw discard ${id}`, "");
+    out.push(`Keep all: covo keep ${id}   Keep some: covo keep ${id} <file>…   Throw away: covo discard ${id}`, "");
     return { code: 0, out: out.join("\n") };
   });
 }
@@ -88,8 +88,8 @@ export function keepCommand(ctx: Ctx, args: string[]): CliResult {
         ...k.conflicts.map((c) => `  ${c.path}  (${REASON[c.reason]})`),
         "",
         "Your version is untouched. You can:",
-        `  - keep only the other files:  cw keep ${id} <file>…`,
-        `  - throw the bot's changes away:  cw discard ${id}`,
+        `  - keep only the other files:  covo keep ${id} <file>…`,
+        `  - throw the bot's changes away:  covo discard ${id}`,
         "  - run the task again on the current files",
         "",
       ];

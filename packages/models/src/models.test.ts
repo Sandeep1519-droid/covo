@@ -200,14 +200,18 @@ test("modelConfig defaults to local Ollama and reads overrides", () => {
     numCtx: 8192,
     think: false,
   });
-  expect(modelConfig({ CW_MODEL_CONTEXT: "16384", CW_MODEL_THINK: "on" })).toMatchObject({
+  expect(modelConfig({ COVO_MODEL_CONTEXT: "16384", COVO_MODEL_THINK: "on" })).toMatchObject({
     numCtx: 16384,
     think: true,
   });
   expect(providerFromConfig(modelConfig({})).id).toBe("ollama:qwen3.5:4b");
   expect(providerFromConfig(modelConfig({})) instanceof OllamaProvider).toBe(true);
   expect(
-    modelConfig({ CW_MODEL_BASE_URL: "https://openrouter.ai/api/v1", CW_MODEL: "x/y:free", CW_MODEL_API_KEY: "k" }),
+    modelConfig({
+      COVO_MODEL_BASE_URL: "https://openrouter.ai/api/v1",
+      COVO_MODEL: "x/y:free",
+      COVO_MODEL_API_KEY: "k",
+    }),
   ).toEqual({
     name: "openrouter",
     baseUrl: "https://openrouter.ai/api/v1",

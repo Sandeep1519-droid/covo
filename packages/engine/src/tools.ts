@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { ToolSpec } from "@cw/models";
-import type { Sandbox } from "@cw/platform";
+import type { ToolSpec } from "@covo/models";
+import type { Sandbox } from "@covo/platform";
 
 // The only things a Phase 1 bot can do. File tools work inside the run's workspace copy and refuse
 // any path that leads outside it (absolute paths, "..", "~", or symlinks pointing out). Commands run
@@ -69,7 +69,7 @@ export interface ToolResult {
   label: string;
   /** Changes files in the workspace copy. */
   mutating: boolean;
-  /** Refused by Coworker's own path check or by the macOS sandbox. */
+  /** Refused by Covo's own path check or by the macOS sandbox. */
   blocked?: "path" | "sandbox";
   /** Set by finish. */
   finished?: string;

@@ -1,6 +1,6 @@
 import { closeSync, fsyncSync, mkdirSync, openSync, rmSync, statfsSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import { type CloneMethod, cloner, type WorkspaceCloner } from "@cw/platform";
+import { type CloneMethod, cloner, type WorkspaceCloner } from "@covo/platform";
 
 export interface CloneCheck {
   ok: boolean;

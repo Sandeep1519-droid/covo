@@ -1,9 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { cwPaths, tildify } from "@cw/core";
-import { auditForRun, openDb } from "@cw/db";
-import { RunError, type RunEvent, startRun } from "@cw/engine";
-import { modelConfig, providerFromConfig } from "@cw/models";
+import { covoPaths, tildify } from "@covo/core";
+import { auditForRun, openDb } from "@covo/db";
+import { RunError, type RunEvent, startRun } from "@covo/engine";
+import { modelConfig, providerFromConfig } from "@covo/models";
 import type { CliResult, Ctx } from "../main.ts";
 
 const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
@@ -16,8 +16,8 @@ const ago = (ms: number) => {
 };
 
 function withDb<T>(ctx: Ctx, fn: (db: Database) => T): T | CliResult {
-  const { db: path } = cwPaths(ctx.home);
-  if (!existsSync(path)) return { code: 1, out: `Coworker isn't set up in ${tildify(ctx.home)} yet. Run: cw init\n` };
+  const { db: path } = covoPaths(ctx.home);
+  if (!existsSync(path)) return { code: 1, out: `Covo isn't set up in ${tildify(ctx.home)} yet. Run: covo init\n` };
   const db = openDb(path);
   try {
     return fn(db);
@@ -41,7 +41,7 @@ export function findRun(db: Database, arg: string | undefined): string | { error
   return { error: hits.length ? `"${arg}" matches ${hits.length} runs; use more of the id.` : `No run "${arg}".` };
 }
 
-// ---------------------------------------------------------------- cw run
+// ---------------------------------------------------------------- covo run
 
 export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   const words: string[] = [];
@@ -51,9 +51,9 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
     else words.push(args[i] as string);
   }
   const goal = words.join(" ").trim();
-  if (!goal) return { code: 2, out: 'Usage: cw run "<task>" [--model <name>]\n' };
+  if (!goal) return { code: 2, out: 'Usage: covo run "<task>" [--model <name>]\n' };
 
-  const cfg = modelConfig(model ? { ...ctx.env, CW_MODEL: model } : ctx.env);
+  const cfg = modelConfig(model ? { ...ctx.env, COVO_MODEL: model } : ctx.env);
   const provider = ctx.provider ?? providerFromConfig(cfg);
   const print = ctx.print;
   const controller = new AbortController();
@@ -74,7 +74,7 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
         `  ${String(e.seq).padStart(2)} ${mark} ${pad(e.name, 12)} ${pad(e.target || "", 40)} ${e.blocked ? `blocked (${e.blocked === "path" ? "outside the workspace" : "by the sandbox"})` : e.label}\n`,
       );
     } else if (e.type === "recovered") {
-      print(`     (the bot typed its tool call as text; Coworker understood it)\n`);
+      print(`     (the bot typed its tool call as text; Covo understood it)\n`);
     } else if (e.type === "model" && e.toolCalls === 0 && e.text.trim()) {
       print(`     (the bot answered in words: "${pad(e.text.trim().replace(/\s+/g, " "), 60)}")\n`);
     }
@@ -94,9 +94,9 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       lines.push(
         "",
         "Nothing in your workspace has changed yet.",
-        `  See the changes:  cw diff ${short}`,
-        `  Keep them:        cw keep ${short}`,
-        `  Throw them away:  cw discard ${short}`,
+        `  See the changes:  covo diff ${short}`,
+        `  Keep them:        covo keep ${short}`,
+        `  Throw them away:  covo discard ${short}`,
       );
     } else if (r.state === "SUCCEEDED") {
       lines.push(`Done in ${time}. No files were changed.`, `Bot's summary: ${r.summary}`);
@@ -105,7 +105,7 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
     } else {
       lines.push(`Failed after ${time}: ${r.error}`, "The workspace copy was thrown away; your files are untouched.");
     }
-    lines.push(`Details: cw log ${r.runId}`, "");
+    lines.push(`Details: covo log ${r.runId}`, "");
     return { code: r.state === "REVIEWING" || r.state === "SUCCEEDED" ? 0 : 1, out: lines.join("\n") };
   } catch (e) {
     if (e instanceof RunError) return { code: 1, out: `${e.message}\n` };
@@ -115,7 +115,7 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   }
 }
 
-// ---------------------------------------------------------------- cw status
+// ---------------------------------------------------------------- covo status
 
 export function statusCommand(ctx: Ctx): CliResult {
   const r = withDb(ctx, (db) => {
@@ -126,7 +126,7 @@ export function statusCommand(ctx: Ctx): CliResult {
          FROM runs r ORDER BY r.created_at DESC, r.id DESC LIMIT 15`,
       )
       .all();
-    if (!rows.length) return { code: 0, out: 'No runs yet. Try: cw run "add a Setup section to README.md"\n' };
+    if (!rows.length) return { code: 0, out: 'No runs yet. Try: covo run "add a Setup section to README.md"\n' };
     const now = ctx.now();
     const lines = [`${pad("RUN", 31)} ${pad("STATE", 10)} ${pad("STEPS", 5)} ${pad("STARTED", 9)} TASK`];
     for (const x of rows)
@@ -138,7 +138,7 @@ export function statusCommand(ctx: Ctx): CliResult {
   return r;
 }
 
-// ---------------------------------------------------------------- cw log
+// ---------------------------------------------------------------- covo log
 
 export function logCommand(ctx: Ctx, args: string[]): CliResult {
   return withDb(ctx, (db) => {
@@ -202,7 +202,7 @@ export function logCommand(ctx: Ctx, args: string[]): CliResult {
       );
     }
     const audit = auditForRun(db, id);
-    lines.push("", `Activity log: ${audit.length} entries for this run (check them all with: cw audit verify)`, "");
+    lines.push("", `Activity log: ${audit.length} entries for this run (check them all with: covo audit verify)`, "");
     return { code: 0, out: lines.join("\n") };
   }) as CliResult;
 }

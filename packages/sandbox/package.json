@@ -1,5 +1,5 @@
 {
-  "name": "@cw/sandbox",
+  "name": "@covo/sandbox",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@cw/core": "workspace:*",
-    "@cw/platform": "workspace:*"
+    "@covo/core": "workspace:*",
+    "@covo/platform": "workspace:*"
   }
 }

@@ -11,55 +11,55 @@
       },
     },
     "apps/cli": {
-      "name": "@cw/cli",
+      "name": "@covo/cli",
       "version": "0.0.1",
       "bin": {
-        "cw": "./src/index.ts",
+        "covo": "./src/index.ts",
       },
       "dependencies": {
-        "@cw/core": "workspace:*",
-        "@cw/db": "workspace:*",
-        "@cw/engine": "workspace:*",
-        "@cw/models": "workspace:*",
-        "@cw/sandbox": "workspace:*",
+        "@covo/core": "workspace:*",
+        "@covo/db": "workspace:*",
+        "@covo/engine": "workspace:*",
+        "@covo/models": "workspace:*",
+        "@covo/sandbox": "workspace:*",
       },
     },
     "packages/core": {
-      "name": "@cw/core",
+      "name": "@covo/core",
       "version": "0.0.1",
     },
     "packages/db": {
-      "name": "@cw/db",
+      "name": "@covo/db",
       "version": "0.0.1",
       "dependencies": {
-        "@cw/core": "workspace:*",
+        "@covo/core": "workspace:*",
       },
     },
     "packages/engine": {
-      "name": "@cw/engine",
+      "name": "@covo/engine",
       "version": "0.0.1",
       "dependencies": {
-        "@cw/core": "workspace:*",
-        "@cw/db": "workspace:*",
-        "@cw/models": "workspace:*",
-        "@cw/platform": "workspace:*",
-        "@cw/sandbox": "workspace:*",
+        "@covo/core": "workspace:*",
+        "@covo/db": "workspace:*",
+        "@covo/models": "workspace:*",
+        "@covo/platform": "workspace:*",
+        "@covo/sandbox": "workspace:*",
       },
     },
     "packages/models": {
-      "name": "@cw/models",
+      "name": "@covo/models",
       "version": "0.0.1",
     },
     "packages/platform": {
-      "name": "@cw/platform",
+      "name": "@covo/platform",
       "version": "0.0.1",
     },
     "packages/sandbox": {
-      "name": "@cw/sandbox",
+      "name": "@covo/sandbox",
       "version": "0.0.1",
       "dependencies": {
-        "@cw/core": "workspace:*",
-        "@cw/platform": "workspace:*",
+        "@covo/core": "workspace:*",
+        "@covo/platform": "workspace:*",
       },
     },
   },
@@ -86,19 +86,19 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.6.8", "", { "os": "win32", "cpu": "x64" }, "sha512-cD6HvGczZUiAYsY8s2TxxXj2AHFzEdMomvVJfEjzOjBM45nGqIDfBpbtvwGQzDCN8X2yKKk9u1jnDZisT2nxIg=="],
 
-    "@cw/cli": ["@cw/cli@workspace:apps/cli"],
+    "@covo/cli": ["@covo/cli@workspace:apps/cli"],
 
-    "@cw/core": ["@cw/core@workspace:packages/core"],
+    "@covo/core": ["@covo/core@workspace:packages/core"],
 
-    "@cw/db": ["@cw/db@workspace:packages/db"],
+    "@covo/db": ["@covo/db@workspace:packages/db"],
 
-    "@cw/engine": ["@cw/engine@workspace:packages/engine"],
+    "@covo/engine": ["@covo/engine@workspace:packages/engine"],
 
-    "@cw/models": ["@cw/models@workspace:packages/models"],
+    "@covo/models": ["@covo/models@workspace:packages/models"],
 
-    "@cw/platform": ["@cw/platform@workspace:packages/platform"],
+    "@covo/platform": ["@covo/platform@workspace:packages/platform"],
 
-    "@cw/sandbox": ["@cw/sandbox@workspace:packages/sandbox"],
+    "@covo/sandbox": ["@covo/sandbox@workspace:packages/sandbox"],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 

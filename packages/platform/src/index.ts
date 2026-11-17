@@ -45,12 +45,12 @@ export interface PresenceAuth {
 
 export function cloner(): WorkspaceCloner {
   if (process.platform === "darwin") return macCloner;
-  throw new Error(`Coworker doesn't support ${process.platform} yet`);
+  throw new Error(`Covo doesn't support ${process.platform} yet`);
 }
 
 export function sandbox(): Sandbox {
   if (process.platform === "darwin") return macSandbox;
-  throw new Error(`Coworker doesn't support ${process.platform} yet`);
+  throw new Error(`Covo doesn't support ${process.platform} yet`);
 }
 
 export { buildProfile } from "./mac/seatbelt.ts";

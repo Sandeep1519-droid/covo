@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
-import { cwPaths, tildify } from "@cw/core";
-import { checkModels, modelConfig } from "@cw/models";
-import { checkClone, checkSandbox } from "@cw/sandbox";
+import { covoPaths, tildify } from "@covo/core";
+import { checkModels, modelConfig } from "@covo/models";
+import { checkClone, checkSandbox } from "@covo/sandbox";
 import type { CliResult, Ctx } from "../main.ts";
 
 const CHECKS = ["clone", "sandbox", "models"] as const;
@@ -11,10 +11,10 @@ const MARK: Record<Status, string> = { pass: "✓", fail: "✗", warn: "!", skip
 export async function doctorCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   const which = args[0] ?? "all";
   if (which !== "all" && !(CHECKS as readonly string[]).includes(which)) {
-    return { code: 2, out: `Usage: cw doctor [${CHECKS.join(" | ")}]\n` };
+    return { code: 2, out: `Usage: covo doctor [${CHECKS.join(" | ")}]\n` };
   }
-  const p = cwPaths(ctx.home);
-  if (!existsSync(p.runs)) return { code: 1, out: `Coworker isn't set up in ${tildify(ctx.home)} yet. Run: cw init\n` };
+  const p = covoPaths(ctx.home);
+  if (!existsSync(p.runs)) return { code: 1, out: `Covo isn't set up in ${tildify(ctx.home)} yet. Run: covo init\n` };
 
   const sections: string[][] = [];
   let failed = 0;

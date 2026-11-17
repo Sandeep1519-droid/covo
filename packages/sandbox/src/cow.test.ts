@@ -32,7 +32,7 @@ const read = (dir: string, rel: string) => readFileSync(join(dir, rel), "utf8");
 const touch = (path: string) => utimesSync(path, new Date(), new Date(Date.now() + 5_000));
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "cw-cow-"));
+  root = mkdtempSync(join(tmpdir(), "covo-cow-"));
   ws = join(root, "workspace");
   put(ws, "README.md", "# Hello\n");
   put(ws, "src/app.ts", "export const a = 1;\n");

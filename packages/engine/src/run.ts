@@ -1,11 +1,11 @@
 import type { Database } from "bun:sqlite";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { canonicalJson, cwPaths, newId, sha256Hex } from "@cw/core";
-import { appendAudit, DEFAULT_AGENT_ID, migrate, openDb } from "@cw/db";
-import type { ChatMessage, ModelProvider } from "@cw/models";
-import { cloner, sandbox as defaultSandbox, type Sandbox, type WorkspaceCloner } from "@cw/platform";
-import { CowWorkspaces, type DiffSummary } from "@cw/sandbox";
+import { canonicalJson, covoPaths, newId, sha256Hex } from "@covo/core";
+import { appendAudit, DEFAULT_AGENT_ID, migrate, openDb } from "@covo/db";
+import type { ChatMessage, ModelProvider } from "@covo/models";
+import { cloner, sandbox as defaultSandbox, type Sandbox, type WorkspaceCloner } from "@covo/platform";
+import { CowWorkspaces, type DiffSummary } from "@covo/sandbox";
 import { type LoopLimits, type ModelTurn, runLoop } from "./loop.ts";
 import { systemPrompt, taskMessage } from "./prompt.ts";
 import { type RunState, recordState } from "./state.ts";
@@ -89,8 +89,8 @@ function listing(ws: string): string {
 
 export async function startRun(o: StartRunOptions): Promise<RunSummary> {
   const now = o.now ?? Date.now;
-  const paths = cwPaths(o.home);
-  if (!existsSync(paths.db)) throw new RunError("Coworker isn't set up yet. Run: cw init");
+  const paths = covoPaths(o.home);
+  if (!existsSync(paths.db)) throw new RunError("Covo isn't set up yet. Run: covo init");
   const db = openDb(paths.db);
   try {
     migrate(db, now);
@@ -119,7 +119,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
     )
     .get(dept.id);
   if ((busy?.n ?? 0) >= dept.max_concurrency) {
-    throw new RunError("Another task is already running here. On an 8 GB Mac, Coworker runs one task at a time.");
+    throw new RunError("Another task is already running here. On an 8 GB Mac, Covo runs one task at a time.");
   }
 
   const runId = newId("run");

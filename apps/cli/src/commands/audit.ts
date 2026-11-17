@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { cwPaths, tildify } from "@cw/core";
-import { type AuditProblem, openDb, verifyAudit } from "@cw/db";
+import { covoPaths, tildify } from "@covo/core";
+import { type AuditProblem, openDb, verifyAudit } from "@covo/db";
 import type { CliResult, Ctx } from "../main.ts";
 
 const WHAT: Record<AuditProblem["kind"], string> = {
@@ -11,9 +11,9 @@ const WHAT: Record<AuditProblem["kind"], string> = {
 
 export function auditCommand(ctx: Ctx, args: string[]): CliResult {
   const [sub] = args;
-  if (sub !== "verify") return { code: 2, out: "Usage: cw audit verify\n" };
-  const { db: dbPath } = cwPaths(ctx.home);
-  if (!existsSync(dbPath)) return { code: 1, out: `Coworker isn't set up in ${tildify(ctx.home)} yet. Run: cw init\n` };
+  if (sub !== "verify") return { code: 2, out: "Usage: covo audit verify\n" };
+  const { db: dbPath } = covoPaths(ctx.home);
+  if (!existsSync(dbPath)) return { code: 1, out: `Covo isn't set up in ${tildify(ctx.home)} yet. Run: covo init\n` };
 
   const db = openDb(dbPath);
   try {

@@ -1,5 +1,5 @@
-import { canonicalJson, sha256Hex } from "@cw/core";
-import { type ChatMessage, collect, type ModelProvider, type ToolCall, type ToolSpec } from "@cw/models";
+import { canonicalJson, sha256Hex } from "@covo/core";
+import { type ChatMessage, collect, type ModelProvider, type ToolCall, type ToolSpec } from "@covo/models";
 import { toolCallsFromText } from "./text-tools.ts";
 import type { ToolResult } from "./tools.ts";
 

@@ -2,14 +2,14 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Sandbox } from "@cw/platform";
+import type { Sandbox } from "@covo/platform";
 import { checkSandbox } from "./sandbox-check.ts";
 
 let root: string;
 let db: string;
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "cw-sbcheck-"));
-  db = join(root, "cw.db");
+  root = mkdtempSync(join(tmpdir(), "covo-sbcheck-"));
+  db = join(root, "covo.db");
   writeFileSync(db, "secret");
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -37,7 +37,7 @@ test("a sandbox that lets everything through fails the checks", async () => {
   const home = join(root, "home");
   const checks = await checkSandbox({ scratchDir: root, dbPath: db, home, sandbox: leaky });
   const byName = Object.fromEntries(checks.map((c) => [c.name, c.status]));
-  expect(byName["Coworker's own data is hidden"]).toBe("fail");
+  expect(byName["Covo's own data is hidden"]).toBe("fail");
   expect(byName["Can't write anywhere else"]).toBe("fail");
   expect(byName["Home folder is hidden"]).toBe("skip"); // fake home doesn't exist
 });

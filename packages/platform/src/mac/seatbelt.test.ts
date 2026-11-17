@@ -10,7 +10,7 @@ let tmp: string;
 const opts = (extra = {}) => ({ workspace: ws, tmp, timeoutMs: 10_000, ...extra });
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "cw-sb-"));
+  root = mkdtempSync(join(tmpdir(), "covo-sb-"));
   ws = join(root, "ws");
   tmp = join(root, "tmp");
   mkdirSync(ws);

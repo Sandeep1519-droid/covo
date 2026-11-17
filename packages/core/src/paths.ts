@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export interface CwPaths {
+export interface CovoPaths {
   home: string;
   state: string;
   db: string;
@@ -10,16 +10,16 @@ export interface CwPaths {
   logs: string;
 }
 
-/** Coworker's data folder: $CW_HOME, or ~/Coworker. */
-export function cwHome(env: Record<string, string | undefined> = process.env): string {
-  return env.CW_HOME && env.CW_HOME.length > 0 ? env.CW_HOME : join(homedir(), "Coworker");
+/** Covo's data folder: $COVO_HOME, or ~/Covo. */
+export function covoHome(env: Record<string, string | undefined> = process.env): string {
+  return env.COVO_HOME && env.COVO_HOME.length > 0 ? env.COVO_HOME : join(homedir(), "Covo");
 }
 
-export function cwPaths(home: string): CwPaths {
+export function covoPaths(home: string): CovoPaths {
   return {
     home,
     state: join(home, "state"),
-    db: join(home, "state", "cw.db"),
+    db: join(home, "state", "covo.db"),
     workspaces: join(home, "workspaces"),
     runs: join(home, "runs"),
     logs: join(home, "logs"),

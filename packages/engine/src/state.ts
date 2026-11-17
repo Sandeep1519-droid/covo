@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import { canonicalJson } from "@cw/core";
-import { appendAudit } from "@cw/db";
+import { canonicalJson } from "@covo/core";
+import { appendAudit } from "@covo/db";
 
 export type RunState =
   | "QUEUED"

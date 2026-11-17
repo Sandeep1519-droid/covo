@@ -1,4 +1,4 @@
-import type { ToolCall } from "@cw/models";
+import type { ToolCall } from "@covo/models";
 
 // Small local models sometimes write a tool call as JSON in their reply instead of making a real
 // call, e.g. ```json {"command": "write_file", "arguments": {...}} ```. When a reply has no real

@@ -11,10 +11,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cwPaths } from "@cw/core";
-import { initHome, openDb, verifyAudit } from "@cw/db";
-import { MockProvider, type ModelEvent } from "@cw/models";
-import { macSandbox } from "@cw/platform";
+import { covoPaths } from "@covo/core";
+import { initHome, openDb, verifyAudit } from "@covo/db";
+import { MockProvider, type ModelEvent } from "@covo/models";
+import { macSandbox } from "@covo/platform";
 import { NUDGE, runLoop } from "./loop.ts";
 import { startRun } from "./run.ts";
 import { insideWorkspace, PathError, runTool, TOOL_SPECS } from "./tools.ts";
@@ -25,7 +25,7 @@ let tmp: string;
 const ctx = () => ({ ws, tmp, sandbox: macSandbox, commandTimeoutMs: 10_000 });
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "cw-engine-")));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "covo-engine-")));
   ws = join(root, "ws");
   tmp = join(root, "tmp");
   mkdirSync(ws);
@@ -219,7 +219,7 @@ describe("runLoop", () => {
 describe("startRun", () => {
   let home: string;
   beforeEach(() => {
-    home = join(root, "Coworker");
+    home = join(root, "Covo");
     initHome(home);
     writeFileSync(join(home, "workspaces/default/README.md"), "# Project\n");
   });
@@ -245,9 +245,9 @@ describe("startRun", () => {
     expect(r.diff?.changes.map((c) => `${c.kind} ${c.path}`)).toEqual(["modified README.md"]);
     // the real workspace is untouched; the copy has the change
     expect(readFileSync(join(home, "workspaces/default/README.md"), "utf8")).toBe("# Project\n");
-    expect(readFileSync(join(cwPaths(home).runs, r.runId, "ws/README.md"), "utf8")).toContain("## Setup");
+    expect(readFileSync(join(covoPaths(home).runs, r.runId, "ws/README.md"), "utf8")).toContain("## Setup");
 
-    const db = openDb(cwPaths(home).db);
+    const db = openDb(covoPaths(home).db);
     expect(db.query("SELECT state, summary FROM runs WHERE id = ?").get(r.runId)).toEqual({
       state: "REVIEWING",
       summary: "Added a Setup section to README.md",
@@ -272,7 +272,7 @@ describe("startRun", () => {
     expect(verifyAudit(db).ok).toBe(true);
     expect(db.query("SELECT COUNT(*) AS n FROM budget_ledger WHERE run_id = ?").get(r.runId)).toEqual({ n: 4 });
     db.close();
-    expect(existsSync(join(cwPaths(home).runs, r.runId, "transcript.jsonl"))).toBe(true);
+    expect(existsSync(join(covoPaths(home).runs, r.runId, "transcript.jsonl"))).toBe(true);
   });
 
   test("records a blocked attempt to read your SSH keys", async () => {
@@ -282,13 +282,13 @@ describe("startRun", () => {
     ]);
     const r = await startRun({ home, goal: "read my ssh key", provider });
     expect(r.state).toBe("SUCCEEDED"); // nothing changed, so nothing to review
-    const db = openDb(cwPaths(home).db);
+    const db = openDb(covoPaths(home).db);
     expect(db.query("SELECT decision, target FROM audit_log WHERE action = 'tool.read_file'").get()).toEqual({
       decision: "deny",
       target: "~/.ssh/id_ed25519",
     });
     db.close();
-    expect(existsSync(join(cwPaths(home).runs, r.runId, "ws"))).toBe(false);
+    expect(existsSync(join(covoPaths(home).runs, r.runId, "ws"))).toBe(false);
   });
 
   test("a failed run throws its copy away", async () => {
@@ -298,11 +298,11 @@ describe("startRun", () => {
       provider: new MockProvider([[{ type: "done", stop: "error", error: "Ollama is not running" }]]),
     });
     expect(r).toMatchObject({ state: "FAILED", error: "Ollama is not running" });
-    expect(existsSync(join(cwPaths(home).runs, r.runId, "ws"))).toBe(false);
+    expect(existsSync(join(covoPaths(home).runs, r.runId, "ws"))).toBe(false);
   });
 
   test("only one task runs at a time", async () => {
-    const db = openDb(cwPaths(home).db);
+    const db = openDb(covoPaths(home).db);
     db.exec(
       "INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, created_at) VALUES ('run_busy', 'bot_assistant', 'dept_default', 'cli', 'x', 'RUNNING', 1)",
     );

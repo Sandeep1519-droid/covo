@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { VERSION } from "@cw/core";
+import { VERSION } from "@covo/core";
 import { main } from "./main.ts";
 
 test("--version prints the version", async () => {
@@ -16,7 +16,7 @@ test("unknown command exits with code 2", async () => {
   expect((await main(["fly"])).code).toBe(2);
 });
 
-test("the cw binary runs", async () => {
+test("the covo binary runs", async () => {
   const p = Bun.spawn([process.execPath, `${import.meta.dir}/index.ts`, "--version"], { stdout: "pipe" });
   expect((await new Response(p.stdout).text()).trim()).toBe(VERSION);
   expect(await p.exited).toBe(0);

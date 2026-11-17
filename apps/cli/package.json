@@ -1,16 +1,16 @@
 {
-  "name": "@cw/cli",
+  "name": "@covo/cli",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "bin": {
-    "cw": "./src/index.ts"
+    "covo": "./src/index.ts"
   },
   "dependencies": {
-    "@cw/core": "workspace:*",
-    "@cw/db": "workspace:*",
-    "@cw/sandbox": "workspace:*",
-    "@cw/models": "workspace:*",
-    "@cw/engine": "workspace:*"
+    "@covo/core": "workspace:*",
+    "@covo/db": "workspace:*",
+    "@covo/sandbox": "workspace:*",
+    "@covo/models": "workspace:*",
+    "@covo/engine": "workspace:*"
   }
 }

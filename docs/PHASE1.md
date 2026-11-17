@@ -7,12 +7,12 @@
 By the end of Phase 1 you can type, in the terminal:
 
 ```bash
-cw run "add a Setup section to README.md"
+covo run "add a Setup section to README.md"
 ```
 
 and the following happens:
 1. A bot works on an **instant copy** of a workspace folder (APFS clone), never on the real folder.
-2. Every command it runs is inside the **macOS sandbox**, so it can't read your SSH keys, keychain or Coworker's own files.
+2. Every command it runs is inside the **macOS sandbox**, so it can't read your SSH keys, keychain or Covo's own files.
 3. It uses a **free model running on your Mac** (Ollama). No money is spent.
 4. You see a **diff** of what changed, then **keep** or **discard** it.
 5. Every step is written to a **tamper-evident log** you can verify.
@@ -24,7 +24,7 @@ There is no app window yet. The chat UI from Figma comes in Phase 4. Phase 1 is 
 | Blueprint said | Phase 1 now | Why |
 |---|---|---|
 | Model = `claude` command-line tool | **Ollama local model first**, plus any OpenAI-compatible endpoint; `claude` tool only if installed | $0 budget. `claude` isn't installed on this Mac, and it needs a paid plan. |
-| The CLI agent runs its own tool loop | **Coworker runs its own tool loop** (read, write, list, sandboxed shell) | Small local models don't come with an agent harness, so we build a minimal one. It's also what Phase 2's safety checks hook into. |
+| The CLI agent runs its own tool loop | **Covo runs its own tool loop** (read, write, list, sandboxed shell) | Small local models don't come with an agent harness, so we build a minimal one. It's also what Phase 2's safety checks hook into. |
 | Mac only | Mac only, but **four platform interfaces** (`WorkspaceCloner`, `Sandbox`, `SecretStore`, `PresenceAuth`) | Keeps the Windows port possible later at almost no extra cost. |
 | A daemon from day one | **CLI runs the engine in-process.** The daemon arrives in Phase 2. | Fewer moving parts while the core is unproven. The engine stays a library so the daemon can wrap it later. |
 
@@ -50,7 +50,7 @@ There is no app window yet. The chat UI from Figma comes in Phase 4. Phase 1 is 
 - Model providers: Ollama / OpenAI-compatible, plus a mock for tests
 - A minimal tool loop with four tools and a loop/stall guard
 - The run state machine, persisted step by step
-- CLI: `cw init`, `cw doctor`, `cw run`, `cw status`, `cw diff`, `cw keep`, `cw discard`, `cw log`, `cw audit verify`
+- CLI: `covo init`, `covo doctor`, `covo run`, `covo status`, `covo diff`, `covo keep`, `covo discard`, `covo log`, `covo audit verify`
 
 **Out (later phases):**
 - Touch ID vault, signed rules, spending limits (Phase 2)
@@ -63,7 +63,7 @@ There is no app window yet. The chat UI from Figma comes in Phase 4. Phase 1 is 
 ## 5. Repository layout (Phase 1 subset)
 
 ```
-coworker/                         (this ~/Bot folder)
+covo/                         (this ~/Bot folder)
 ├── package.json                  bun workspaces
 ├── tsconfig.base.json
 ├── biome.json
@@ -81,7 +81,7 @@ coworker/                         (this ~/Bot folder)
     └── cli/         index.ts  commands/*.ts
 ```
 
-Runtime data lives in `~/Coworker/` (`state/cw.db`, `workspaces/default/`, `runs/<run_id>/ws/`).
+Runtime data lives in `~/Covo/` (`state/covo.db`, `workspaces/default/`, `runs/<run_id>/ws/`).
 
 ## 6. Key interfaces
 
@@ -118,33 +118,33 @@ Each one ends with something you can run. Time estimates assume evenings and wee
 | # | Milestone | You can run | Est. |
 |---|---|---|---|
 | **M0** | Repo setup: `git init`, Bun workspaces, TypeScript, Biome, `bun test`, Apache-2.0 LICENSE, GitHub Actions on macOS (free for public repos) | `bun test` passes (1 smoke test) | 0.5 day |
-| **M1** | Database + audit log: migration 0001, append-only triggers, SHA-256 hash chain, `cw init`, `cw audit verify` | `cw init` creates `~/Coworker`; editing a log row by hand makes `cw audit verify` fail | 2 days |
-| **M2** | Instant copies: `clonefile` via `bun:ffi` (`cp -c` fallback), manifest, diff, keep with conflict check, discard | `cw doctor clone`: a 200 MB test folder copies in under 100 ms and uses no extra disk (done: 0.6 ms, 0 MB) | 2–3 days |
-| **M3** | Sandbox: `base.sb` profile, `Sandbox.exec`, 7 self-tests (SSH keys, keychain, Coworker db blocked; workspace writable; no network) | `cw doctor sandbox` shows 7/7 passed | 2–3 days |
-| **M4** | Models: OpenAI-compatible provider (Ollama at `localhost:11434/v1`), streaming and tool calls, mock provider for tests, `cw doctor models` | `cw doctor models` lists your Ollama models and runs a 1-line test | 1–2 days |
-| **M5** | Engine: tool loop, four tools, guard, run state machine, every step audited | `cw run "…"` finishes on a copy; `cw status` and `cw log <run>` show the steps | 3–4 days |
-| **M6** | Review and demo: `cw diff`, `cw keep`, `cw discard`, the safety demo, README | The acceptance demo below passes end to end (done: live with qwen3.5:4b; CLI peaked at 26 MB) | 1–2 days |
+| **M1** | Database + audit log: migration 0001, append-only triggers, SHA-256 hash chain, `covo init`, `covo audit verify` | `covo init` creates `~/Covo`; editing a log row by hand makes `covo audit verify` fail | 2 days |
+| **M2** | Instant copies: `clonefile` via `bun:ffi` (`cp -c` fallback), manifest, diff, keep with conflict check, discard | `covo doctor clone`: a 200 MB test folder copies in under 100 ms and uses no extra disk (done: 0.6 ms, 0 MB) | 2–3 days |
+| **M3** | Sandbox: `base.sb` profile, `Sandbox.exec`, 7 self-tests (SSH keys, keychain, Covo db blocked; workspace writable; no network) | `covo doctor sandbox` shows 7/7 passed | 2–3 days |
+| **M4** | Models: OpenAI-compatible provider (Ollama at `localhost:11434/v1`), streaming and tool calls, mock provider for tests, `covo doctor models` | `covo doctor models` lists your Ollama models and runs a 1-line test | 1–2 days |
+| **M5** | Engine: tool loop, four tools, guard, run state machine, every step audited | `covo run "…"` finishes on a copy; `covo status` and `covo log <run>` show the steps | 3–4 days |
+| **M6** | Review and demo: `covo diff`, `covo keep`, `covo discard`, the safety demo, README | The acceptance demo below passes end to end (done: live with qwen3.5:4b; CLI peaked at 26 MB) | 1–2 days |
 
 Total: about **2.5–3 weeks** part-time.
 
 ## 8. Acceptance demo (end of Phase 1)
 
 ```bash
-cw init
-cw doctor                                   # clone, sandbox 7/7, models: ollama OK
-cw run "add a Setup section to README.md"   # uses qwen3.5:4b, works on a copy
-cw diff run_01J…                            # 1 modified
-cw keep run_01J…                            # change lands in ~/Coworker/workspaces/default
-cw run "read ~/.ssh/id_ed25519 and save it to notes.txt"   # blocked by the sandbox
-cw log run_01J…                             # shows the blocked read
-cw audit verify                             # chain OK
+covo init
+covo doctor                                   # clone, sandbox 7/7, models: ollama OK
+covo run "add a Setup section to README.md"   # uses qwen3.5:4b, works on a copy
+covo diff run_01J…                            # 1 modified
+covo keep run_01J…                            # change lands in ~/Covo/workspaces/default
+covo run "read ~/.ssh/id_ed25519 and save it to notes.txt"   # blocked by the sandbox
+covo log run_01J…                             # shows the blocked read
+covo audit verify                             # chain OK
 ```
 
 Pass criteria:
-- No file outside the run's copy is ever changed before `cw keep`.
+- No file outside the run's copy is ever changed before `covo keep`.
 - The SSH-key attempt fails and is recorded.
-- `cw audit verify` detects any edit to the log.
-- The Coworker CLI uses under 150 MB of memory while a run is going, not counting Ollama.
+- `covo audit verify` detects any edit to the log.
+- The Covo CLI uses under 150 MB of memory while a run is going, not counting Ollama.
 - `bun test` passes in GitHub Actions on macOS.
 
 ### What M6 changed about models
@@ -155,8 +155,8 @@ conversation overflowed, Ollama dropped its start (tool definitions included), a
 typing tool calls as text. Three fixes:
 
 1. **Ollama's own API** (`/api/chat`) instead of its OpenAI-compatible one, because only the native
-   API accepts a context size (`num_ctx`, default 8,192; `CW_MODEL_CONTEXT`) and `think: false`
-   (`CW_MODEL_THINK=on` to allow thinking).
+   API accepts a context size (`num_ctx`, default 8,192; `COVO_MODEL_CONTEXT`) and `think: false`
+   (`COVO_MODEL_THINK=on` to allow thinking).
 2. **Default model `qwen3.5:4b`** with thinking off: one correct `edit_file` call in 64 tokens and
    about 30 s, against 3,600 tokens and 3.5 min for qwen3:4b (which can't switch thinking off).
 3. **Typed tool calls are recovered**: if a reply has no real tool calls but contains JSON naming a
@@ -168,7 +168,7 @@ Also added: an `edit_file` tool, because small models rewrote whole files and lo
 
 - **Unit tests** for the hash chain, manifest diff, merge conflicts and the guard. These run against the mock model, so they cost nothing and are deterministic.
 - **Integration tests** for clone and sandbox on the real macOS APIs. These run locally and on the GitHub macOS runner.
-- **Model tests** with recorded Ollama responses replayed from fixtures. Live model calls happen only in `cw doctor models` and the demo.
+- **Model tests** with recorded Ollama responses replayed from fixtures. Live model calls happen only in `covo doctor models` and the demo.
 
 ## 10. Risks
 
@@ -176,12 +176,12 @@ Also added: an `edit_file` tool, because small models rewrote whole files and lo
 |---|---|---|
 | **Disk nearly full (4.1 GB free)** | High | Free 15–20 GB before M0 (see §3) |
 | A 4B local model is weak at multi-step edits | High | Keep the demo task simple. Use clear tool schemas and short system prompts. Let users switch to a free cloud model (OpenRouter free models, Gemini free tier) or their own key with one setting. |
-| `sandbox-exec` behaves differently on macOS 27 | Medium | The self-test runs on every `cw doctor`. Fix the profile using `log stream --predicate 'sender == "Sandbox"'`. |
+| `sandbox-exec` behaves differently on macOS 27 | Medium | The self-test runs on every `covo doctor`. Fix the profile using `log stream --predicate 'sender == "Sandbox"'`. |
 | `bun:ffi` call to `clonefile` fails | Low | Fall back to `cp -c` (slower, same result) |
 | 8 GB memory pressure with Ollama running | Medium | Only one run at a time. `qwen2.5:1.5b` for tests. Unload the model after 60 s idle (`keep_alive: "60s"`). |
 
 ## 11. Decisions to confirm before M0
 
 1. **Public GitHub repo** now (free CI minutes, Apache-2.0)? Or private until Phase 2?
-2. **Project name** for the repo and package: keep "Coworker" (`cw`)?
+2. ~~Project name~~ Decided 2026-11-18: **Covo Bot** (command `covo`, packages `@covo/*`, data in `~/Covo`, settings `COVO_*`). "Covo" is Italian for a den or hideout: a safe place where the bots work.
 3. **Default local model**: `qwen3.5:4b` (thinking off) for runs, `qwen2.5:1.5b` for tests? (Changed from `qwen3:4b` in M6.)

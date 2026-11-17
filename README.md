@@ -1,4 +1,4 @@
-# Coworker
+# Covo Bot
 
 Open-source AI coworkers that run on your own Mac. Bots work on instant copies of your files, inside the macOS sandbox, using AI models you bring yourself. They ask before anything risky, and only your fingerprint can change their limits.
 
@@ -17,7 +17,7 @@ Requirements: macOS on Apple Silicon, [Bun](https://bun.sh) 1.4+, and optionally
 ```bash
 bun install
 bun run check     # lint + type-check + tests
-bun run cw --help
+bun run covo --help
 ```
 
 | Command             | What it does                            |
@@ -30,7 +30,7 @@ bun run cw --help
 ## Layout
 
 ```
-apps/cli         the `cw` command
+apps/cli         the `covo` command
 packages/core    shared types, IDs, canonical JSON, data-folder paths
 packages/db      SQLite schema, migrations, tamper-evident activity log
 packages/platform  OS-specific pieces behind interfaces (macOS clonefile today)
@@ -39,18 +39,18 @@ packages/models    model providers: Ollama or any OpenAI-compatible service, plu
 packages/engine    the bot: workspace tools, tool loop with guards, and the run lifecycle
 ```
 
-A bot always works on an instant copy of your workspace. Nothing in your real files changes until you review the run with `cw diff` and choose `cw keep` (all files, or just some) or `cw discard`. If you edited a file yourself while the bot worked, `cw keep` refuses that file instead of overwriting your edit. Models default to local Ollama (`qwen3.5:4b`, thinking off, 8K context); see `cw --help` for the `CW_MODEL*` settings.
+A bot always works on an instant copy of your workspace. Nothing in your real files changes until you review the run with `covo diff` and choose `covo keep` (all files, or just some) or `covo discard`. If you edited a file yourself while the bot worked, `covo keep` refuses that file instead of overwriting your edit. Models default to local Ollama (`qwen3.5:4b`, thinking off, 8K context); see `covo --help` for the `COVO_MODEL*` settings.
 
 Try it with a throwaway data folder:
 
 ```bash
-CW_HOME=/tmp/cw-try bun run cw init
-CW_HOME=/tmp/cw-try bun run cw doctor
-CW_HOME=/tmp/cw-try bun run cw run "add a Setup section to README.md"
-CW_HOME=/tmp/cw-try bun run cw diff last
-CW_HOME=/tmp/cw-try bun run cw keep last      # or: cw discard last
-CW_HOME=/tmp/cw-try bun run cw status
-CW_HOME=/tmp/cw-try bun run cw audit verify
+COVO_HOME=/tmp/covo-try bun run covo init
+COVO_HOME=/tmp/covo-try bun run covo doctor
+COVO_HOME=/tmp/covo-try bun run covo run "add a Setup section to README.md"
+COVO_HOME=/tmp/covo-try bun run covo diff last
+COVO_HOME=/tmp/covo-try bun run covo keep last      # or: covo discard last
+COVO_HOME=/tmp/covo-try bun run covo status
+COVO_HOME=/tmp/covo-try bun run covo audit verify
 ```
 
 ## License

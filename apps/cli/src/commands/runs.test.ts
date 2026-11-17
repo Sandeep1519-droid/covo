@@ -2,18 +2,18 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MockProvider } from "@cw/models";
+import { MockProvider } from "@covo/models";
 import { main } from "../main.ts";
 
 let home: string;
 let printed = "";
-const env = () => ({ CW_HOME: home });
+const env = () => ({ COVO_HOME: home });
 const print = (s: string) => {
   printed += s;
 };
 
 beforeEach(async () => {
-  home = mkdtempSync(join(tmpdir(), "cw-runs-"));
+  home = mkdtempSync(join(tmpdir(), "covo-runs-"));
   printed = "";
   await main(["init"], env());
   writeFileSync(join(home, "workspaces/default/README.md"), "# Project\n");
@@ -27,7 +27,7 @@ const provider = () =>
     MockProvider.tool("finish", { summary: "Added Setup" }),
   ]);
 
-test("cw run shows progress and what's waiting for review", async () => {
+test("covo run shows progress and what's waiting for review", async () => {
   const r = await main(["run", "add", "a", "Setup", "section"], env(), { print, provider: provider() });
   expect(r.code).toBe(0);
   expect(printed).toContain("Making a safe copy");
@@ -36,11 +36,11 @@ test("cw run shows progress and what's waiting for review", async () => {
   expect(r.out).toContain("modified README.md");
 });
 
-test("cw run needs a task", async () => {
+test("covo run needs a task", async () => {
   expect((await main(["run"], env(), { print })).code).toBe(2);
 });
 
-test("cw status and cw log show the run", async () => {
+test("covo status and covo log show the run", async () => {
   await main(["run", "add Setup"], env(), { print, provider: provider() });
   const s = await main(["status"], env());
   expect(s.out).toContain("REVIEWING");
@@ -51,7 +51,7 @@ test("cw status and cw log show the run", async () => {
   expect(l.out).toContain("Activity log: 7 entries");
 });
 
-test("cw log explains unknown runs", async () => {
+test("covo log explains unknown runs", async () => {
   expect((await main(["log", "zzzz"], env())).out).toContain('No run "zzzz"');
   expect((await main(["log", "last"], env())).out).toContain("no runs yet");
 });
@@ -60,12 +60,12 @@ test("cw log explains unknown runs", async () => {
 
 const readme = () => readFileSync(join(home, "workspaces/default/README.md"), "utf8");
 
-test("cw run points to diff, keep and discard", async () => {
+test("covo run points to diff, keep and discard", async () => {
   const r = await main(["run", "add Setup"], env(), { print, provider: provider() });
-  expect(r.out).toMatch(/cw diff \w{6}\n {2}Keep them: {8}cw keep \w{6}/);
+  expect(r.out).toMatch(/covo diff \w{6}\n {2}Keep them: {8}covo keep \w{6}/);
 });
 
-test("cw diff shows a unified diff; --stat a summary", async () => {
+test("covo diff shows a unified diff; --stat a summary", async () => {
   await main(["run", "add Setup"], env(), { print, provider: provider() });
   const d = await main(["diff", "last"], env());
   expect(d.code).toBe(0);
@@ -77,7 +77,7 @@ test("cw diff shows a unified diff; --stat a summary", async () => {
   expect((await main(["diff", "last"], env(), { color: true })).out).toContain("\x1b[32m+## Setup\x1b[0m");
 });
 
-test("cw keep lands the change in the workspace", async () => {
+test("covo keep lands the change in the workspace", async () => {
   await main(["run", "add Setup"], env(), { print, provider: provider() });
   expect(readme()).toBe("# Project\n");
   const k = await main(["keep", "last"], env());
@@ -89,7 +89,7 @@ test("cw keep lands the change in the workspace", async () => {
   expect((await main(["audit", "verify"], env())).code).toBe(0);
 });
 
-test("cw keep explains a clash with your own edit and keeps nothing", async () => {
+test("covo keep explains a clash with your own edit and keeps nothing", async () => {
   await main(["run", "add Setup"], env(), { print, provider: provider() });
   writeFileSync(join(home, "workspaces/default/README.md"), "# Mine, edited meanwhile\n");
   const k = await main(["keep", "last"], env());
@@ -99,7 +99,7 @@ test("cw keep explains a clash with your own edit and keeps nothing", async () =
   expect(readme()).toBe("# Mine, edited meanwhile\n");
 });
 
-test("cw discard throws the changes away", async () => {
+test("covo discard throws the changes away", async () => {
   await main(["run", "add Setup"], env(), { print, provider: provider() });
   const d = await main(["discard", "last"], env());
   expect(d.out).toContain("Threw away 1 change");

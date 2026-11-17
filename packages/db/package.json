@@ -1,5 +1,5 @@
 {
-  "name": "@cw/db",
+  "name": "@covo/db",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -7,6 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@cw/core": "workspace:*"
+    "@covo/core": "workspace:*"
   }
 }

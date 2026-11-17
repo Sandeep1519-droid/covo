@@ -1,5 +1,5 @@
 {
-  "name": "coworker",
+  "name": "covo",
   "version": "0.0.1",
   "private": true,
   "description": "Open-source AI coworkers that run safely on your own Mac.",
@@ -15,7 +15,7 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check": "bun run lint && bun run typecheck && bun test",
-    "cw": "bun apps/cli/src/index.ts"
+    "covo": "bun apps/cli/src/index.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",

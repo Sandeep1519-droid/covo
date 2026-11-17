@@ -59,7 +59,7 @@ CREATE TABLE run_steps (
   tool_name        TEXT,
   args_json        TEXT,
   result_digest    TEXT,                            -- sha256 of the full result
-  result_preview   TEXT,                            -- first 2 KB, for `cw log`
+  result_preview   TEXT,                            -- first 2 KB, for `covo log`
   fingerprint      TEXT,                            -- tool + args + result digest, for loop detection
   mutating         INTEGER NOT NULL DEFAULT 0,
   decision         TEXT,                            -- allow | ask | deny

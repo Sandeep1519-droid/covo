@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type CwPaths, cwPaths } from "@cw/core";
+import { type CovoPaths, covoPaths } from "@covo/core";
 import { appendAudit } from "./audit.ts";
 import { migrate, openDb } from "./db.ts";
 
@@ -8,16 +8,16 @@ export const DEFAULT_DEPT_ID = "dept_default";
 export const DEFAULT_AGENT_ID = "bot_assistant";
 
 export interface InitResult {
-  /** false when Coworker was already set up here (nothing was changed). */
+  /** false when Covo was already set up here (nothing was changed). */
   created: boolean;
-  paths: CwPaths;
+  paths: CovoPaths;
   migrationsApplied: number[];
   workspace: string;
 }
 
-/** Creates the Coworker folder, database, default department and main bot. Safe to run twice. */
+/** Creates the Covo folder, database, default department and main bot. Safe to run twice. */
 export function initHome(home: string, now: () => number = Date.now): InitResult {
-  const paths = cwPaths(home);
+  const paths = covoPaths(home);
   for (const dir of [paths.state, paths.workspaces, paths.runs, paths.logs]) mkdirSync(dir, { recursive: true });
   const workspace = join(paths.workspaces, "default");
   mkdirSync(workspace, { recursive: true });
