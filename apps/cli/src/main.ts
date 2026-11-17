@@ -11,7 +11,7 @@ Usage:
 Commands (Phase 1):
   init            Create ~/Coworker and the default workspace
   audit verify    Check the activity log for tampering
-  doctor [check]  Check instant copies and the sandbox (models in M4)
+  doctor [check]  Check instant copies, the sandbox and the model
   run "<task>"    Give a bot a task on a safe copy              (M5)
   status          Show runs                                     (M5)
   log <run>       Show a run's steps                            (M5)
@@ -24,7 +24,10 @@ Options:
   -v, --version   Show the version
 
 Environment:
-  CW_HOME         Use another data folder instead of ~/Coworker
+  CW_HOME             Use another data folder instead of ~/Coworker
+  CW_MODEL            Model name (default qwen3:4b)
+  CW_MODEL_BASE_URL   OpenAI-compatible endpoint (default Ollama, http://127.0.0.1:11434/v1)
+  CW_MODEL_API_KEY    Key for hosted services such as OpenRouter or Gemini
 `;
 
 export interface CliResult {
@@ -35,11 +38,12 @@ export interface CliResult {
 export interface Ctx {
   home: string;
   now: () => number;
+  env: Record<string, string | undefined>;
 }
 
 export async function main(argv: string[], env: Record<string, string | undefined> = process.env): Promise<CliResult> {
   const [cmd, ...rest] = argv;
-  const ctx: Ctx = { home: cwHome(env), now: Date.now };
+  const ctx: Ctx = { home: cwHome(env), now: Date.now, env };
   if (!cmd || cmd === "-h" || cmd === "--help" || cmd === "help") return { code: 0, out: HELP };
   if (cmd === "-v" || cmd === "--version") return { code: 0, out: `${VERSION}\n` };
   if (cmd === "init") return initCommand(ctx);

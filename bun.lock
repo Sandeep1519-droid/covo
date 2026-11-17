@@ -19,6 +19,7 @@
       "dependencies": {
         "@cw/core": "workspace:*",
         "@cw/db": "workspace:*",
+        "@cw/models": "workspace:*",
         "@cw/sandbox": "workspace:*",
       },
     },
@@ -32,6 +33,10 @@
       "dependencies": {
         "@cw/core": "workspace:*",
       },
+    },
+    "packages/models": {
+      "name": "@cw/models",
+      "version": "0.0.1",
     },
     "packages/platform": {
       "name": "@cw/platform",
@@ -74,6 +79,8 @@
     "@cw/core": ["@cw/core@workspace:packages/core"],
 
     "@cw/db": ["@cw/db@workspace:packages/db"],
+
+    "@cw/models": ["@cw/models@workspace:packages/models"],
 
     "@cw/platform": ["@cw/platform@workspace:packages/platform"],
 

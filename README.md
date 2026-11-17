@@ -34,10 +34,11 @@ apps/cli         the `cw` command
 packages/core    shared types, IDs, canonical JSON, data-folder paths
 packages/db      SQLite schema, migrations, tamper-evident activity log
 packages/platform  OS-specific pieces behind interfaces (macOS clonefile today)
-packages/sandbox   instant workspace copies: snapshot, diff, keep, discard
+packages/sandbox   instant workspace copies and the sandbox self-tests
+packages/models    model providers: Ollama or any OpenAI-compatible service, plus a test mock
 ```
 
-More packages (`models`, `engine`) arrive with milestones M4–M5.
+The `engine` package (the bot's tool loop) arrives with milestone M5. Models default to local Ollama (`qwen3:4b`); see `cw --help` for the `CW_MODEL*` settings.
 
 Try it with a throwaway data folder:
 
