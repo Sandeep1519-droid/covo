@@ -174,6 +174,11 @@ export class CowWorkspaces {
     return { applied: changes, conflicts: [] };
   }
 
+  /** Deletes only the workspace copy, keeping the run's records (transcript, manifest). */
+  dropCopy(runId: string): void {
+    rmSync(this.wsPath(runId), { recursive: true, force: true });
+  }
+
   discard(runId: string): void {
     rmSync(this.runDir(runId), { recursive: true, force: true });
   }

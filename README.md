@@ -36,14 +36,18 @@ packages/db      SQLite schema, migrations, tamper-evident activity log
 packages/platform  OS-specific pieces behind interfaces (macOS clonefile today)
 packages/sandbox   instant workspace copies and the sandbox self-tests
 packages/models    model providers: Ollama or any OpenAI-compatible service, plus a test mock
+packages/engine    the bot: workspace tools, tool loop with guards, and the run lifecycle
 ```
 
-The `engine` package (the bot's tool loop) arrives with milestone M5. Models default to local Ollama (`qwen3:4b`); see `cw --help` for the `CW_MODEL*` settings.
+Reviewing and keeping a run's changes (`cw diff`, `keep`, `discard`) arrives with milestone M6. Models default to local Ollama (`qwen3:4b`); see `cw --help` for the `CW_MODEL*` settings.
 
 Try it with a throwaway data folder:
 
 ```bash
 CW_HOME=/tmp/cw-try bun run cw init
+CW_HOME=/tmp/cw-try bun run cw doctor
+CW_HOME=/tmp/cw-try bun run cw run "add a Setup section to README.md"
+CW_HOME=/tmp/cw-try bun run cw status
 CW_HOME=/tmp/cw-try bun run cw audit verify
 ```
 

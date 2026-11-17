@@ -10,6 +10,7 @@
     "@cw/core": "workspace:*",
     "@cw/db": "workspace:*",
     "@cw/sandbox": "workspace:*",
-    "@cw/models": "workspace:*"
+    "@cw/models": "workspace:*",
+    "@cw/engine": "workspace:*"
   }
 }

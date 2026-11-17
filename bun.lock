@@ -19,6 +19,7 @@
       "dependencies": {
         "@cw/core": "workspace:*",
         "@cw/db": "workspace:*",
+        "@cw/engine": "workspace:*",
         "@cw/models": "workspace:*",
         "@cw/sandbox": "workspace:*",
       },
@@ -32,6 +33,17 @@
       "version": "0.0.1",
       "dependencies": {
         "@cw/core": "workspace:*",
+      },
+    },
+    "packages/engine": {
+      "name": "@cw/engine",
+      "version": "0.0.1",
+      "dependencies": {
+        "@cw/core": "workspace:*",
+        "@cw/db": "workspace:*",
+        "@cw/models": "workspace:*",
+        "@cw/platform": "workspace:*",
+        "@cw/sandbox": "workspace:*",
       },
     },
     "packages/models": {
@@ -79,6 +91,8 @@
     "@cw/core": ["@cw/core@workspace:packages/core"],
 
     "@cw/db": ["@cw/db@workspace:packages/db"],
+
+    "@cw/engine": ["@cw/engine@workspace:packages/engine"],
 
     "@cw/models": ["@cw/models@workspace:packages/models"],
 

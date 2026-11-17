@@ -1,0 +1,16 @@
+{
+  "name": "@cw/engine",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cw/core": "workspace:*",
+    "@cw/db": "workspace:*",
+    "@cw/models": "workspace:*",
+    "@cw/platform": "workspace:*",
+    "@cw/sandbox": "workspace:*"
+  }
+}
