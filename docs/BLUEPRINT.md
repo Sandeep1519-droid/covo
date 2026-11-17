@@ -1561,7 +1561,7 @@ Build:
 5. Watchdog: leases, 90 s ticks, fingerprints, 3-strike kill + CoW rollback, coalesced check-in messages.
 6. Boot-time recovery of stale leases.
 
-Acceptance demo: bot learns a rule from your correction → `covo memory diff` shows commit with `Run-Id`; `covo memory revert` removes it and the bot stops applying it. Make a deliberately looping skill → killed after 3 strikes, workspace untouched, Telegram summary. Activity Monitor shows `cwd` < 150 MB idle and no MLX process after 5 idle minutes.
+Acceptance demo: bot learns a rule from your correction → `covo memory diff` shows commit with `Run-Id`; `covo memory revert` removes it and the bot stops applying it. Make a deliberately looping skill → killed after 3 strikes, workspace untouched, Telegram summary. Activity Monitor shows `covod` < 150 MB idle and no MLX process after 5 idle minutes.
 
 ### Phase 4 — Browser, gatekeeper, Take the Wheel, dashboard (≈ 3 weeks)
 
