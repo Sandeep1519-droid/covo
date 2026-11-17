@@ -2,18 +2,18 @@ import { expect, test } from "bun:test";
 import { VERSION } from "@cw/core";
 import { main } from "./main.ts";
 
-test("--version prints the version", () => {
-  expect(main(["--version"])).toEqual({ code: 0, out: `${VERSION}\n` });
+test("--version prints the version", async () => {
+  expect(await main(["--version"])).toEqual({ code: 0, out: `${VERSION}\n` });
 });
 
-test("no arguments prints help", () => {
-  const r = main([]);
+test("no arguments prints help", async () => {
+  const r = await main([]);
   expect(r.code).toBe(0);
   expect(r.out).toContain("audit verify");
 });
 
-test("unknown command exits with code 2", () => {
-  expect(main(["fly"]).code).toBe(2);
+test("unknown command exits with code 2", async () => {
+  expect((await main(["fly"])).code).toBe(2);
 });
 
 test("the cw binary runs", async () => {

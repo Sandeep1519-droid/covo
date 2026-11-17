@@ -4,3 +4,5 @@ export type { CloneCheck } from "./doctor.ts";
 export { checkClone } from "./doctor.ts";
 export type { Entry, EntryKind, Manifest } from "./manifest.ts";
 export { buildManifest, entryAt, sameMeta } from "./manifest.ts";
+export type { SandboxCheck, SandboxCheckOptions } from "./sandbox-check.ts";
+export { checkSandbox } from "./sandbox-check.ts";

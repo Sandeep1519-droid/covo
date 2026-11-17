@@ -2,6 +2,7 @@
 // can be added later without touching the engine (see docs/PHASE1.md §2).
 
 import { macCloner } from "./mac/clonefile.ts";
+import { macSandbox } from "./mac/seatbelt.ts";
 
 export type CloneMethod = "clonefile" | "copy";
 
@@ -25,10 +26,12 @@ export interface SandboxOptions {
   tmp: string;
   timeoutMs: number;
   env?: Record<string, string>;
+  /** Folders the command may read but not change. */
+  readOnly?: string[];
 }
 
 export interface Sandbox {
-  exec(argv: string[], opts: SandboxOptions): Promise<ExecResult>; // M3
+  exec(argv: string[], opts: SandboxOptions): Promise<ExecResult>;
 }
 
 export interface SecretStore {
@@ -45,4 +48,10 @@ export function cloner(): WorkspaceCloner {
   throw new Error(`Coworker doesn't support ${process.platform} yet`);
 }
 
-export { macCloner };
+export function sandbox(): Sandbox {
+  if (process.platform === "darwin") return macSandbox;
+  throw new Error(`Coworker doesn't support ${process.platform} yet`);
+}
+
+export { buildProfile } from "./mac/seatbelt.ts";
+export { macCloner, macSandbox };

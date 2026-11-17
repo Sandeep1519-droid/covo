@@ -11,7 +11,7 @@ Usage:
 Commands (Phase 1):
   init            Create ~/Coworker and the default workspace
   audit verify    Check the activity log for tampering
-  doctor [clone]  Check instant copies (sandbox, models in M3–M4)
+  doctor [check]  Check instant copies and the sandbox (models in M4)
   run "<task>"    Give a bot a task on a safe copy              (M5)
   status          Show runs                                     (M5)
   log <run>       Show a run's steps                            (M5)
@@ -37,7 +37,7 @@ export interface Ctx {
   now: () => number;
 }
 
-export function main(argv: string[], env: Record<string, string | undefined> = process.env): CliResult {
+export async function main(argv: string[], env: Record<string, string | undefined> = process.env): Promise<CliResult> {
   const [cmd, ...rest] = argv;
   const ctx: Ctx = { home: cwHome(env), now: Date.now };
   if (!cmd || cmd === "-h" || cmd === "--help" || cmd === "help") return { code: 0, out: HELP };
