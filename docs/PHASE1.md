@@ -118,7 +118,7 @@ Each one ends with something you can run. Time estimates assume evenings and wee
 |---|---|---|---|
 | **M0** | Repo setup: `git init`, Bun workspaces, TypeScript, Biome, `bun test`, Apache-2.0 LICENSE, GitHub Actions on macOS (free for public repos) | `bun test` passes (1 smoke test) | 0.5 day |
 | **M1** | Database + audit log: migration 0001, append-only triggers, SHA-256 hash chain, `cw init`, `cw audit verify` | `cw init` creates `~/Coworker`; editing a log row by hand makes `cw audit verify` fail | 2 days |
-| **M2** | Instant copies: `clonefile` via `bun:ffi` (`cp -c` fallback), manifest, diff, keep with conflict check, discard | `cw doctor clone`: a 1 GB folder copies in under 100 ms and uses no extra disk | 2–3 days |
+| **M2** | Instant copies: `clonefile` via `bun:ffi` (`cp -c` fallback), manifest, diff, keep with conflict check, discard | `cw doctor clone`: a 200 MB test folder copies in under 100 ms and uses no extra disk (done: 0.6 ms, 0 MB) | 2–3 days |
 | **M3** | Sandbox: `base.sb` profile, `Sandbox.exec`, 7 self-tests (SSH keys, keychain, Coworker db blocked; workspace writable; no network) | `cw doctor sandbox` shows 7/7 passed | 2–3 days |
 | **M4** | Models: OpenAI-compatible provider (Ollama at `localhost:11434/v1`), streaming and tool calls, mock provider for tests, `cw doctor models` | `cw doctor models` lists your Ollama models and runs a 1-line test | 1–2 days |
 | **M5** | Engine: tool loop, four tools, guard, run state machine, every step audited | `cw run "…"` finishes on a copy; `cw status` and `cw log <run>` show the steps | 3–4 days |

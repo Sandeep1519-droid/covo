@@ -1,0 +1,6 @@
+export type { Change, ChangeKind, Conflict, DiffSummary, KeepResult, Snapshot } from "./cow.ts";
+export { CowWorkspaces } from "./cow.ts";
+export type { CloneCheck } from "./doctor.ts";
+export { checkClone } from "./doctor.ts";
+export type { Entry, EntryKind, Manifest } from "./manifest.ts";
+export { buildManifest, entryAt, sameMeta } from "./manifest.ts";

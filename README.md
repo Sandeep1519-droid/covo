@@ -33,9 +33,11 @@ bun run cw --help
 apps/cli         the `cw` command
 packages/core    shared types, IDs, canonical JSON, data-folder paths
 packages/db      SQLite schema, migrations, tamper-evident activity log
+packages/platform  OS-specific pieces behind interfaces (macOS clonefile today)
+packages/sandbox   instant workspace copies: snapshot, diff, keep, discard
 ```
 
-More packages (`platform`, `sandbox`, `models`, `engine`) arrive with milestones M2–M5.
+More packages (`models`, `engine`) arrive with milestones M4–M5.
 
 Try it with a throwaway data folder:
 

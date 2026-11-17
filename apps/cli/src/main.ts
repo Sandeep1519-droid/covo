@@ -1,5 +1,6 @@
 import { cwHome, VERSION } from "@cw/core";
 import { auditCommand } from "./commands/audit.ts";
+import { doctorCommand } from "./commands/doctor.ts";
 import { initCommand } from "./commands/init.ts";
 
 const HELP = `cw ${VERSION}: Coworker command line
@@ -10,7 +11,7 @@ Usage:
 Commands (Phase 1):
   init            Create ~/Coworker and the default workspace
   audit verify    Check the activity log for tampering
-  doctor          Check clones, sandbox and models              (M2–M4)
+  doctor [clone]  Check instant copies (sandbox, models in M3–M4)
   run "<task>"    Give a bot a task on a safe copy              (M5)
   status          Show runs                                     (M5)
   log <run>       Show a run's steps                            (M5)
@@ -43,5 +44,6 @@ export function main(argv: string[], env: Record<string, string | undefined> = p
   if (cmd === "-v" || cmd === "--version") return { code: 0, out: `${VERSION}\n` };
   if (cmd === "init") return initCommand(ctx);
   if (cmd === "audit") return auditCommand(ctx, rest);
+  if (cmd === "doctor") return doctorCommand(ctx, rest);
   return { code: 2, out: `cw: "${cmd}" isn't available yet. Run "cw --help" to see what's planned.\n` };
 }
