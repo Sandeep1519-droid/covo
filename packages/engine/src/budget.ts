@@ -53,6 +53,8 @@ export interface BudgetOptions {
   setState(state: "AWAITING_APPROVAL" | "RUNNING"): void;
   onRequest?(req: SpendRequest): void;
   ask?: AskApproval;
+  /** Stop at the limit instead of asking (fully automatic bots). */
+  neverAsk?: boolean;
   pollMs?: number;
   signal?: AbortSignal;
 }
@@ -110,6 +112,20 @@ export class Budget {
     const overRun = this.runLimit !== null && this.runSpent + est > this.runLimit;
     const overDay = this.dayAllowance !== null && day + est > this.dayAllowance;
     if (!overRun && !overDay) return undefined;
+    if (this.o.neverAsk) {
+      appendAudit(
+        this.o.db,
+        {
+          actor: "system",
+          action: "spend.limit",
+          runId: this.o.runId,
+          decision: "deny",
+          detail: { spentUsd: this.runSpent, estimateUsd: est, overRun, overDay },
+        },
+        this.o.now,
+      );
+      return `Spending limit reached (${usd(this.runSpent)} spent on this task). Fully automatic bots stop instead of asking.`;
+    }
 
     // Approving covers the next step plus one more limit's worth, or about four more steps if a step
     // costs more than the limit, so a small limit doesn't turn into a question before every step.

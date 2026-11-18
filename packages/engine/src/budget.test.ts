@@ -88,7 +88,7 @@ test("a step that costs more than the whole limit doesn't mean a question before
       return true;
     },
   });
-  expect(r.state).toBe("REVIEWING");
+  expect(r.state).toBe("KEPT"); // the main bot is Automatic, so it kept its own work
   expect(asked).toBeLessThanOrEqual(2); // six $0.60 steps on a $0.10 limit
 });
 

@@ -12,7 +12,8 @@ export type RunState =
   | "STOPPED"
   | "FAILED"
   | "KEPT"
-  | "DISCARDED";
+  | "DISCARDED"
+  | "ROLLED_BACK";
 
 const FINISHED: RunState[] = ["REVIEWING", "SUCCEEDED", "STOPPED", "FAILED"];
 

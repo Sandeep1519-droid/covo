@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { covoPaths, tildify } from "@covo/core";
 import { openDb } from "@covo/db";
-import { discardRun, keepRun, RunError, reviewRun } from "@covo/engine";
+import { discardRun, keepRun, RunError, reviewRun, undoRun } from "@covo/engine";
 import type { CliResult, Ctx } from "../main.ts";
 import { findRun } from "./runs.ts";
 
@@ -103,6 +103,37 @@ export function keepCommand(ctx: Ctx, args: string[]): CliResult {
     }
     lines.push("", "Recorded in the activity log.", "");
     return { code: 0, out: lines.join("\n") };
+  });
+}
+
+export function undoCommand(ctx: Ctx, args: string[]): CliResult {
+  const id = resolveRun(ctx, args[0]);
+  if (typeof id !== "string") return id;
+  return guard(() => {
+    const u = undoRun(ctx.home, id, ctx.now);
+    if (u.conflicts.length) {
+      const why = {
+        "changed-since-keep": "you changed it after the bot's change was kept",
+        "deleted-since-keep": "you deleted it after the bot's change was kept",
+        "created-since-keep": "a file with this name was created after the bot deleted it",
+      } as const;
+      return {
+        code: 1,
+        out: [
+          "Nothing was undone, so your later work is safe. These files changed after the bot's work was kept:",
+          ...u.conflicts.map((c) => `  ${c.path}  (${why[c.reason]})`),
+          "",
+        ].join("\n"),
+      };
+    }
+    return {
+      code: 0,
+      out: [
+        `Undone. Put back ${u.restored.length} file${u.restored.length === 1 ? "" : "s"} exactly as ${u.restored.length === 1 ? "it was" : "they were"}:`,
+        ...u.restored.map((p) => `  ${p}`),
+        "",
+      ].join("\n"),
+    };
   });
 }
 

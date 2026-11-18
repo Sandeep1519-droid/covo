@@ -4,7 +4,16 @@ import { join } from "node:path";
 import { covoPaths } from "@covo/core";
 import { appendAudit, migrate, openDb } from "@covo/db";
 import { cloner, type WorkspaceCloner } from "@covo/platform";
-import { type Change, type Conflict, CowWorkspaces, type Hunk, unifiedDiff } from "@covo/sandbox";
+import {
+  type Change,
+  type Conflict,
+  CowWorkspaces,
+  type Hunk,
+  pruneUndo,
+  type UndoConflict,
+  UndoError,
+  unifiedDiff,
+} from "@covo/sandbox";
 import { RunError } from "./run.ts";
 import { type RunState, recordState } from "./state.ts";
 
@@ -73,7 +82,8 @@ function withRun<T>(
 function requireReviewing(run: RunRow, cow: CowWorkspaces): void {
   if (run.state !== "REVIEWING") {
     const why: Partial<Record<RunState, string>> = {
-      KEPT: "its changes were already kept",
+      KEPT: `its changes were already kept (undo them with: covo undo ${run.id.slice(-6)})`,
+      ROLLED_BACK: "its changes were kept and then undone",
       DISCARDED: "its changes were already thrown away",
       SUCCEEDED: "it didn't change any files",
       STOPPED: "it was stopped, so its copy was thrown away",
@@ -134,70 +144,140 @@ export function keepRun(
     now,
     (db, run, cow) => {
       requireReviewing(run, cow);
-      const all = cow.diff(runId).changes;
-      let only: string[] | undefined;
-      if (opts.only?.length) {
-        const known = new Set(all.map((c) => c.path));
-        const unknown = opts.only.filter((p) => !known.has(p));
-        if (unknown.length) throw new RunError(`Run ${runId} didn't change: ${unknown.join(", ")}`);
-        // Keeping a file inside a new folder needs the folder too.
-        const pick = new Set(opts.only);
-        for (const p of opts.only) {
-          const parts = p.split("/");
-          for (let i = 1; i < parts.length; i++) {
-            const parent = parts.slice(0, i).join("/");
-            if (known.has(parent)) pick.add(parent);
-          }
-        }
-        only = [...pick];
+      return keepChanges(db, runId, cow, now, { only: opts.only, actor: "user" });
+    },
+    opts.cloner,
+  );
+}
+
+/** How long undo data is kept, and how much at most (ADR-010; adjustable later). */
+export const UNDO_MAX_AGE_MS = 30 * 86_400_000;
+export const UNDO_MAX_BYTES = 2 * 1024 ** 3;
+
+/**
+ * Copies a REVIEWING run's changes into the workspace (all, or `only` these paths), saving undo
+ * data first, and moves the run to KEPT. On a conflict nothing is applied and the run stays in
+ * REVIEWING. Used by `covo keep` and by automatic bots.
+ */
+export function keepChanges(
+  db: Database,
+  runId: string,
+  cow: CowWorkspaces,
+  now: () => number,
+  o: { only?: string[]; actor: "user" | "system" },
+): KeepOutcome {
+  const all = cow.diff(runId).changes;
+  let only: string[] | undefined;
+  if (o.only?.length) {
+    const known = new Set(all.map((c) => c.path));
+    const unknown = o.only.filter((p) => !known.has(p));
+    if (unknown.length) throw new RunError(`Run ${runId} didn't change: ${unknown.join(", ")}`);
+    // Keeping a file inside a new folder needs the folder too.
+    const pick = new Set(o.only);
+    for (const p of o.only) {
+      const parts = p.split("/");
+      for (let i = 1; i < parts.length; i++) {
+        const parent = parts.slice(0, i).join("/");
+        if (known.has(parent)) pick.add(parent);
       }
-      const r = cow.keep(runId, only);
-      const files = (cs: Change[]) => cs.filter((c) => c.entry !== "dir").map((c) => c.path);
-      if (r.conflicts.length) {
-        appendAudit(
-          db,
-          {
-            actor: "user",
-            action: "run.keep",
-            runId,
-            decision: "deny",
-            detail: { reason: "conflict", conflicts: r.conflicts.map((c) => ({ path: c.path, reason: c.reason })) },
-          },
-          now,
-        );
-        return { runId, kept: [], dropped: [], conflicts: r.conflicts };
-      }
-      const kept = files(r.applied);
-      const keptSet = new Set(r.applied.map((c) => c.path));
-      const dropped = files(all.filter((c) => !keptSet.has(c.path)));
-      const ws = cow.wsPath(runId);
-      // Record what exactly was kept, so the activity log can prove which content landed.
-      const hashOf = (c: Change) =>
-        c.entry === "file" && c.kind !== "deleted"
-          ? new Bun.CryptoHasher("sha256").update(readFileSync(join(ws, c.path))).digest("hex")
-          : null;
+    }
+    only = [...pick];
+  }
+  const r = cow.keep(runId, only);
+  const files = (cs: Change[]) => cs.filter((c) => c.entry !== "dir").map((c) => c.path);
+  const auto = o.actor === "system" ? { automatic: true } : {};
+  if (r.conflicts.length) {
+    appendAudit(
+      db,
+      {
+        actor: o.actor,
+        action: "run.keep",
+        runId,
+        decision: "deny",
+        detail: {
+          reason: "conflict",
+          conflicts: r.conflicts.map((c) => ({ path: c.path, reason: c.reason })),
+          ...auto,
+        },
+      },
+      now,
+    );
+    return { runId, kept: [], dropped: [], conflicts: r.conflicts };
+  }
+  const kept = files(r.applied);
+  const keptSet = new Set(r.applied.map((c) => c.path));
+  const dropped = files(all.filter((c) => !keptSet.has(c.path)));
+  const ws = cow.wsPath(runId);
+  // Record what exactly was kept, so the activity log can prove which content landed.
+  const hashOf = (c: Change) =>
+    c.entry === "file" && c.kind !== "deleted"
+      ? new Bun.CryptoHasher("sha256").update(readFileSync(join(ws, c.path))).digest("hex")
+      : null;
+  appendAudit(
+    db,
+    {
+      actor: o.actor,
+      action: "run.keep",
+      runId,
+      decision: "allow",
+      detail: {
+        kept: r.applied
+          .filter((c) => c.entry !== "dir")
+          .map((c) => ({ path: c.path, kind: c.kind, sha256: hashOf(c) })),
+        dropped,
+        ...auto,
+      },
+    },
+    now,
+  );
+  recordState(db, runId, "REVIEWING", "KEPT", { actor: o.actor }, now);
+  cow.dropCopy(runId);
+  pruneUndo(cow.runsRoot, now(), UNDO_MAX_AGE_MS, UNDO_MAX_BYTES);
+  return { runId, kept, dropped, conflicts: [] };
+}
+
+export interface UndoOutcome {
+  runId: string;
+  restored: string[];
+  conflicts: UndoConflict[];
+}
+
+/** Puts back what a kept run changed (KEPT → ROLLED_BACK), unless you've changed those files since. */
+export function undoRun(home: string, runId: string, now: () => number = Date.now): UndoOutcome {
+  return withRun(home, runId, now, (db, run, cow) => {
+    if (run.state === "ROLLED_BACK") throw new RunError(`Run ${runId} was already undone.`);
+    if (run.state !== "KEPT") {
+      throw new RunError(`Run ${runId} has nothing to undo: its changes were never kept (it is ${run.state}).`);
+    }
+    let r: ReturnType<CowWorkspaces["undo"]>;
+    try {
+      r = cow.undo(runId);
+    } catch (e) {
+      if (e instanceof UndoError) throw new RunError(e.message);
+      throw e;
+    }
+    if (r.conflicts.length) {
       appendAudit(
         db,
         {
           actor: "user",
-          action: "run.keep",
+          action: "run.undo",
           runId,
-          decision: "allow",
-          detail: {
-            kept: r.applied
-              .filter((c) => c.entry !== "dir")
-              .map((c) => ({ path: c.path, kind: c.kind, sha256: hashOf(c) })),
-            dropped,
-          },
+          decision: "deny",
+          detail: { reason: "conflict", conflicts: r.conflicts },
         },
         now,
       );
-      recordState(db, runId, "REVIEWING", "KEPT", { actor: "user" }, now);
-      cow.dropCopy(runId);
-      return { runId, kept, dropped, conflicts: [] };
-    },
-    opts.cloner,
-  );
+      return { runId, restored: [], conflicts: r.conflicts };
+    }
+    appendAudit(
+      db,
+      { actor: "user", action: "run.undo", runId, decision: "allow", detail: { restored: r.restored } },
+      now,
+    );
+    recordState(db, runId, "KEPT", "ROLLED_BACK", { actor: "user" }, now);
+    return { runId, restored: r.restored, conflicts: [] };
+  });
 }
 
 /** Throws the run's changes away (DISCARDED). The run's records stay. */

@@ -9,6 +9,7 @@ import { CowWorkspaces, type DiffSummary } from "@covo/sandbox";
 import { type AskApproval, Budget, type SpendLimits, type SpendRequest } from "./budget.ts";
 import { type LoopLimits, type ModelTurn, runLoop } from "./loop.ts";
 import { systemPrompt, taskMessage } from "./prompt.ts";
+import { type KeepOutcome, keepChanges } from "./review.ts";
 import { type RunState, recordState } from "./state.ts";
 import { runTool, TOOL_SPECS } from "./tools.ts";
 
@@ -73,6 +74,8 @@ export interface RunSummary {
   tokensOut: number;
   costUsd: number;
   secs: number;
+  /** Set when an automatic bot kept its changes itself (or tried to, and hit a conflict). */
+  autoKeep?: KeepOutcome;
   diff?: DiffSummary;
 }
 
@@ -124,9 +127,10 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
         department_id: string;
         status: string;
         run_limit_usd: number | null;
+        level: "supervised" | "automatic" | "full";
       },
       [string]
-    >("SELECT id, name, purpose, department_id, status, run_limit_usd FROM agents WHERE id = ?")
+    >("SELECT id, name, purpose, department_id, status, run_limit_usd, level FROM agents WHERE id = ?")
     .get(o.agentId ?? DEFAULT_AGENT_ID);
   if (!agent) throw new RunError(`No bot with id ${o.agentId ?? DEFAULT_AGENT_ID}.`);
   if (agent.status !== "active") throw new RunError(`${agent.name} is ${agent.status}, so it can't take tasks.`);
@@ -237,6 +241,8 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       setState: (st) => setState(st),
       onRequest: (req) => o.onEvent?.({ type: "approval", ...req }),
       ask: o.askApproval,
+      // Fully automatic bots never ask: they stop at their limit (ADR-010).
+      neverAsk: agent.level === "full",
       pollMs: o.approvalPollMs,
       signal: o.signal,
     });
@@ -335,6 +341,15 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       const changed = diff.added + diff.modified + diff.deleted > 0;
       if (!changed) cow.dropCopy(runId);
       setState(changed ? "REVIEWING" : "SUCCEEDED", { summary: out.summary });
+      if (changed && agent.level !== "supervised") {
+        // Automatic and fully automatic bots keep undoable work themselves (ADR-010).
+        const kept = keepChanges(db, runId, cow, now, { actor: "system" });
+        if (!kept.conflicts.length) {
+          state = "KEPT";
+          o.onEvent?.({ type: "state", runId, state });
+        }
+        return { ...base, state, summary: out.summary, diff, autoKeep: kept };
+      }
       return { ...base, state, summary: out.summary, diff };
     }
     cow.dropCopy(runId);

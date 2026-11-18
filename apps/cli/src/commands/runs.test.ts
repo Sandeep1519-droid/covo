@@ -17,6 +17,7 @@ beforeEach(async () => {
   printed = "";
   await main(["init"], env());
   writeFileSync(join(home, "workspaces/default/README.md"), "# Project\n");
+  await main(["bots", "set", "Assistant", "--level", "supervised"], env()); // review-first flow
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 

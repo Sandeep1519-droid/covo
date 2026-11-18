@@ -6,7 +6,7 @@ import { botsCommand } from "./commands/bots.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { initCommand } from "./commands/init.ts";
 import { modelsCommand } from "./commands/models.ts";
-import { diffCommand, discardCommand, keepCommand } from "./commands/review.ts";
+import { diffCommand, discardCommand, keepCommand, undoCommand } from "./commands/review.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
 import { decideCommand, limitsCommand, pricesCommand, usageCommand } from "./commands/spend.ts";
 import type { Prompter } from "./prompt.ts";
@@ -32,6 +32,7 @@ Commands (Phase 1):
   diff <run>          Show what a run changed  [--stat for a summary]
   keep <run> [file…]  Copy a run's changes into your workspace (all, or just these files)
   discard <run>       Throw a run's changes away
+  undo <run>          Put back what a kept run changed (refuses files you've changed since)
 
   <run> is a run id, its last 4+ characters, or "last".
 
@@ -103,5 +104,6 @@ export async function main(
   if (cmd === "diff") return diffCommand(ctx, rest);
   if (cmd === "keep") return keepCommand(ctx, rest);
   if (cmd === "discard") return discardCommand(ctx, rest);
+  if (cmd === "undo") return undoCommand(ctx, rest);
   return { code: 2, out: `covo: unknown command "${cmd}". Run "covo --help" to see the commands.\n` };
 }

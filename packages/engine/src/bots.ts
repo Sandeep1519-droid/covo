@@ -250,3 +250,35 @@ export function archiveBot(home: string, nameOrId: string, now: () => number = D
     return { ...toBot(r), status: "archived" };
   });
 }
+
+export interface ApprovalStreak {
+  botName: string;
+  /** Spending pauses you approved for this bot in the period. */
+  approved: number;
+  /** The task limit it runs with now: its own, or null for the general one. */
+  taskLimitUsd: number | null;
+}
+
+/** How often you've let this run's bot spend past its limit recently (to suggest a higher limit). */
+export function approvalStreak(
+  home: string,
+  runId: string,
+  sinceMs: number,
+  now: () => number = Date.now,
+): ApprovalStreak {
+  return withDb(home, now, (db) => {
+    const bot = db
+      .query<{ id: string; name: string; run_limit_usd: number | null }, [string]>(
+        "SELECT a.id, a.name, a.run_limit_usd FROM runs r JOIN agents a ON a.id = r.agent_id WHERE r.id = ?",
+      )
+      .get(runId);
+    if (!bot) throw new RunError(`No run ${runId}.`);
+    const n = db
+      .query<{ n: number }, [string, number]>(
+        `SELECT COUNT(*) AS n FROM approvals p JOIN runs r ON r.id = p.run_id
+         WHERE r.agent_id = ? AND p.kind = 'spend' AND p.status = 'approved' AND p.decided_at >= ?`,
+      )
+      .get(bot.id, sinceMs);
+    return { botName: bot.name, approved: n?.n ?? 0, taskLimitUsd: bot.run_limit_usd };
+  });
+}

@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { canonicalJson, sha256Hex } from "@covo/core";
 import { type CloneMethod, cloner, type WorkspaceCloner } from "@covo/platform";
 import { buildManifest, type Entry, type EntryKind, entryAt, type Manifest, sameMeta } from "./manifest.ts";
+import { applyUndo, readUndo, saveUndo, type UndoResult } from "./undo.ts";
 
 // Copy-on-write workspaces.
 //
@@ -73,6 +74,10 @@ export class CowWorkspaces {
     private readonly runsDir: string,
     private readonly clone: WorkspaceCloner = cloner(),
   ) {}
+
+  get runsRoot(): string {
+    return this.runsDir;
+  }
 
   runDir(runId: string): string {
     return join(this.runsDir, runId);
@@ -149,6 +154,9 @@ export class CowWorkspaces {
     }
     if (conflicts.length) return { applied: [], conflicts };
 
+    // Save what's about to be replaced, so `undo` can put it back.
+    saveUndo(this.runDir(runId), workspace, ws, changes, this.clone, Date.now());
+
     // Create and update parents before children; delete children before parents.
     const writes = changes.filter((c) => c.kind !== "deleted").sort((a, b) => a.path.length - b.path.length);
     const deletes = changes.filter((c) => c.kind === "deleted").sort((a, b) => b.path.length - a.path.length);
@@ -187,6 +195,16 @@ export class CowWorkspaces {
     const b = base[path];
     const workspaceChanged = b ? !current || !sameMeta(b, current) : Boolean(current);
     return { before: read(wsFile), after: read(join(this.wsPath(runId), path)), workspaceChanged };
+  }
+
+  /** Puts back what keep() replaced, unless you've changed those files since. */
+  undo(runId: string): UndoResult {
+    return applyUndo(this.runDir(runId), this.clone, Date.now());
+  }
+
+  hasUndo(runId: string): boolean {
+    const r = readUndo(this.runDir(runId));
+    return r !== null && !r.undoneAt;
   }
 
   /** Deletes only the workspace copy, keeping the run's records (transcript, manifest). */

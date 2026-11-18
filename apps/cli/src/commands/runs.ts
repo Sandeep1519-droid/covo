@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { covoPaths, tildify } from "@covo/core";
 import { auditForRun, openDb } from "@covo/db";
-import { type Bot, findBot, RunError, type RunEvent, startRun, usd } from "@covo/engine";
+import { approvalStreak, type Bot, findBot, RunError, type RunEvent, startRun, updateBot, usd } from "@covo/engine";
 import {
   getLimits,
   loadUserPrices,
@@ -157,15 +157,31 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
         : {}),
     });
     const lines = [""];
+    // Asked about spending often? Offer a higher limit for this bot, so it asks less (ADR-010).
+    const limitTip = await suggestHigherLimit(ctx, r.runId);
+    if (limitTip) lines.push(limitTip, "");
     const cost = r.costUsd > 0 ? `, ${usd(r.costUsd)}` : "";
     const time = `${r.secs.toFixed(0)} s, ${r.steps} step${r.steps === 1 ? "" : "s"}, ${r.tokensIn + r.tokensOut} tokens${cost}`;
-    if (r.state === "REVIEWING" && r.diff) {
+    const short = r.runId.slice(-6);
+    if (r.state === "KEPT" && r.autoKeep) {
       lines.push(`Done in ${time}.`, `Bot's summary: ${r.summary}`, "");
+      lines.push(`Kept in your workspace (${bot?.level === "full" ? "fully automatic" : "automatic"} bot):`);
+      for (const c of (r.diff?.changes ?? []).filter((c) => c.entry !== "dir"))
+        lines.push(`  ${c.kind.padEnd(8)} ${c.path}`);
+      lines.push("", `Changed your mind? Put everything back with: covo undo ${short}`);
+    } else if (r.state === "REVIEWING" && r.diff) {
+      lines.push(`Done in ${time}.`, `Bot's summary: ${r.summary}`, "");
+      if (r.autoKeep?.conflicts.length) {
+        lines.push(
+          "Not kept automatically: you changed these files while the bot worked, so you decide.",
+          ...r.autoKeep.conflicts.map((c) => `  ${c.path}`),
+          "",
+        );
+      }
       lines.push(
         `Changes waiting for you: ${r.diff.modified} modified, ${r.diff.added} added, ${r.diff.deleted} deleted.`,
       );
       for (const c of r.diff.changes.filter((c) => c.entry !== "dir")) lines.push(`  ${c.kind.padEnd(8)} ${c.path}`);
-      const short = r.runId.slice(-6);
       lines.push(
         "",
         "Nothing in your workspace has changed yet.",
@@ -181,13 +197,29 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       lines.push(`Failed after ${time}: ${r.error}`, "The workspace copy was thrown away; your files are untouched.");
     }
     lines.push(`Details: covo log ${r.runId}`, "");
-    return { code: r.state === "REVIEWING" || r.state === "SUCCEEDED" ? 0 : 1, out: lines.join("\n") };
+    return { code: ["REVIEWING", "SUCCEEDED", "KEPT"].includes(r.state) ? 0 : 1, out: lines.join("\n") };
   } catch (e) {
     if (e instanceof RunError) return { code: 1, out: `${e.message}\n` };
     throw e;
   } finally {
     process.off("SIGINT", onInt);
   }
+}
+
+const STREAK = 3;
+const WEEK_MS = 7 * 86_400_000;
+
+async function suggestHigherLimit(ctx: Ctx, runId: string): Promise<string | undefined> {
+  const s = approvalStreak(ctx.home, runId, ctx.now() - WEEK_MS, ctx.now);
+  if (s.approved < STREAK) return undefined;
+  const current = s.taskLimitUsd ?? getLimits(ctx.home).runUsd;
+  if (current === null) return undefined;
+  const raised = Math.max(0.01, Math.ceil(current * 2 * 100) / 100);
+  const question = `You've approved ${s.botName}'s spending ${s.approved} times this week. Raise its task limit from ${usd(current)} to ${usd(raised)}, so it asks less?`;
+  if (!ctx.prompt) return `Tip: ${question} Run: covo bots set "${s.botName}" --task-limit ${raised}`;
+  if (!/^y/i.test(await ctx.prompt.ask(`${question} (y/N)`, "n"))) return undefined;
+  updateBot(ctx.home, s.botName, { taskLimitUsd: raised }, ctx.now);
+  return `${s.botName} may now spend up to ${usd(raised)} per task. Change it any time: covo bots set "${s.botName}" --task-limit <amount>`;
 }
 
 // ---------------------------------------------------------------- covo status
@@ -203,10 +235,10 @@ export function statusCommand(ctx: Ctx): CliResult {
       .all();
     if (!rows.length) return { code: 0, out: 'No runs yet. Try: covo run "add a Setup section to README.md"\n' };
     const now = ctx.now();
-    const lines = [`${pad("RUN", 31)} ${pad("STATE", 10)} ${pad("STEPS", 5)} ${pad("STARTED", 9)} TASK`];
+    const lines = [`${pad("RUN", 31)} ${pad("STATE", 17)} ${pad("STEPS", 5)} ${pad("STARTED", 9)} TASK`];
     for (const x of rows)
       lines.push(
-        `${pad(x.id, 31)} ${pad(x.state, 10)} ${pad(String(x.steps), 5)} ${pad(ago(now - x.created_at), 9)} ${pad(x.goal, 50)}`,
+        `${pad(x.id, 31)} ${pad(x.state, 17)} ${pad(String(x.steps), 5)} ${pad(ago(now - x.created_at), 9)} ${pad(x.goal, 50)}`,
       );
     return { code: 0, out: `${lines.join("\n")}\n` };
   });

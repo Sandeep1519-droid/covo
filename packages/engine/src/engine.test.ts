@@ -15,6 +15,7 @@ import { covoPaths } from "@covo/core";
 import { initHome, openDb, verifyAudit } from "@covo/db";
 import { MockProvider, type ModelEvent } from "@covo/models";
 import { macSandbox } from "@covo/platform";
+import { updateBot } from "./bots.ts";
 import { NUDGE, runLoop } from "./loop.ts";
 import { startRun } from "./run.ts";
 import { insideWorkspace, PathError, runTool, TOOL_SPECS } from "./tools.ts";
@@ -297,6 +298,7 @@ describe("startRun", () => {
     home = join(root, "Covo");
     initHome(home);
     writeFileSync(join(home, "workspaces/default/README.md"), "# Project\n");
+    updateBot(home, "Assistant", { level: "supervised" }); // these tests cover the review-first flow
   });
 
   const happy = () =>

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { covoPaths } from "@covo/core";
 import { initHome, openDb, verifyAudit } from "@covo/db";
 import { MockProvider } from "@covo/models";
+import { updateBot } from "./bots.ts";
 import { discardRun, keepRun, reviewRun } from "./review.ts";
 import { startRun } from "./run.ts";
 
@@ -16,6 +17,7 @@ beforeEach(() => {
   wsDir = join(home, "workspaces/default");
   writeFileSync(join(wsDir, "README.md"), "# Project\n\nHello.\n");
   writeFileSync(join(wsDir, "old.txt"), "bye\n");
+  updateBot(home, "Assistant", { level: "supervised" }); // review-first flow
 });
 afterEach(() => rmSync(join(home, ".."), { recursive: true, force: true }));
 
