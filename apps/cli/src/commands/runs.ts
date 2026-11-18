@@ -1,33 +1,31 @@
 import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { covoPaths, tildify } from "@covo/core";
 import { auditForRun, openDb } from "@covo/db";
 import {
   approvalStreak,
-  type Bot,
-  type Engine,
-  findBot,
-  type RunChainEntry,
+  decide,
   RunError,
   type RunEvent,
+  type RunSummary,
   startRun,
   updateBot,
   usd,
 } from "@covo/engine";
-import {
-  getLimits,
-  loadUserPrices,
-  type ModelConfig,
-  ModelConfigError,
-  type ModelProvider,
-  providerFromConfig,
-  resolveModel,
-} from "@covo/models";
-import { SecretError, secrets } from "@covo/platform";
+import { getLimits } from "@covo/models";
 import type { CliResult, Ctx } from "../main.ts";
-import { makeEngine } from "./engines.ts";
-import { currentCapacity } from "./profile.ts";
+import {
+  eventPrinter,
+  headerLines,
+  type Prepared,
+  PrepareError,
+  prepareRun,
+  type RunHeader,
+  type RunRequest,
+  succeeded,
+  summaryLines,
+} from "../runner.ts";
+import { runViaService, ServiceRefused, serviceHealth, stopViaService } from "../service/client.ts";
 
 const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
 const ago = (ms: number) => {
@@ -70,68 +68,45 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   const words: string[] = [];
   let model: string | undefined;
   let botName: string | undefined;
+  let here = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--model") model = args[++i];
     else if (args[i] === "--bot") botName = args[++i];
+    else if (args[i] === "--here") here = true;
     else words.push(args[i] as string);
   }
   const goal = words.join(" ").trim();
-  if (!goal) return { code: 2, out: 'Usage: covo run "<task>" [--bot <name>] [--model <saved model or name>]\n' };
+  if (!goal)
+    return { code: 2, out: 'Usage: covo run "<task>" [--bot <name>] [--model <saved model or name>] [--here]\n' };
+  const req: RunRequest = { goal, ...(botName ? { bot: botName } : {}), ...(model ? { model } : {}) };
 
-  // How much this Mac can take right now (power profile, ADR-011).
-  const cap = currentCapacity(ctx);
-  if (!cap.canStart) return { code: 1, out: `Not starting: ${cap.notes.join(" ")}\n` };
-  const env = {
-    ...ctx.env,
-    COVO_MODEL_CONTEXT: ctx.env.COVO_MODEL_CONTEXT ?? String(cap.profile.contextTokens),
-    COVO_MODEL_KEEP_ALIVE: ctx.env.COVO_MODEL_KEEP_ALIVE ?? cap.profile.keepAlive,
-  };
+  // With the service running, it does the work, so the task carries on if this terminal closes.
+  // Tests inject models, and --here runs in this process instead.
+  const useService = !here && !ctx.provider && !ctx.engine && ctx.env.COVO_SERVICE !== "off";
+  if (useService && (await serviceHealth(ctx.home))) return runWithService(ctx, req);
+  return runHere(ctx, req);
+}
 
-  // Which models: --model, else the bot's own list, else the default.
-  let bot: Bot | undefined;
-  const entries: { label: string; cfg: ModelConfig; provider?: ModelProvider; engine?: Engine }[] = [];
-  const skipped: string[] = [];
+const askToContinue = async (ctx: Ctx) =>
+  /^y/i.test(await (ctx.prompt as NonNullable<Ctx["prompt"]>).ask("Let it continue? (y/N)", "n"));
+
+async function finishLines(ctx: Ctx, r: RunSummary, header: RunHeader): Promise<CliResult> {
+  const lines = [""];
+  // Asked about spending often? Offer a higher limit for this bot, so it asks less (ADR-010).
+  const limitTip = await suggestHigherLimit(ctx, r.runId);
+  if (limitTip) lines.push(limitTip, "");
+  lines.push(...summaryLines(r, header), "");
+  return { code: succeeded(r) ? 0 : 1, out: lines.join("\n") };
+}
+
+async function runHere(ctx: Ctx, req: RunRequest): Promise<CliResult> {
+  let prepared: Prepared;
   try {
-    if (botName) bot = findBot(ctx.home, botName, ctx.now);
-    const names: (string | undefined)[] = model ? [model] : bot?.models.length ? bot.models : [undefined];
-    for (const n of names) {
-      try {
-        const cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), env, n);
-        const label = n ?? cfg.connection ?? cfg.model;
-        if (cfg.engine) {
-          // A subscription engine (docs/SUBSCRIPTIONS.md): it runs first and does the whole task.
-          const engine = makeEngine(ctx, cfg.engine, cfg.model);
-          if ("missing" in engine) throw new ModelConfigError(engine.missing);
-          if (entries.some((e) => e.provider))
-            skipped.push(`${label}: a subscription engine must come first in a bot's model list`);
-          else entries.push({ label, cfg, engine });
-          continue;
-        }
-        const provider = ctx.provider ?? providerFromConfig(cfg);
-        entries.push({ label, cfg, provider });
-      } catch (e) {
-        if (names.length > 1 && (e instanceof ModelConfigError || e instanceof SecretError)) {
-          skipped.push(`${n}: ${e.message}`);
-        } else throw e;
-      }
-      if (ctx.provider) break; // tests inject one model
-    }
+    prepared = await prepareRun(ctx, req);
   } catch (e) {
-    if (e instanceof ModelConfigError || e instanceof SecretError || e instanceof RunError) {
-      return { code: 1, out: `${e.message}\n` };
-    }
+    if (e instanceof PrepareError) return { code: 1, out: `${e.message}\n` };
     throw e;
   }
-  if (!entries.length)
-    return { code: 1, out: `None of ${bot?.name ?? "the bot"}'s models can be used:\n  ${skipped.join("\n  ")}\n` };
-  const first = entries[0] as (typeof entries)[number];
-  const cfg = first.cfg;
-  const chain: RunChainEntry[] | undefined =
-    entries.length > 1 || first.engine
-      ? entries.map((e) =>
-          e.engine ? { label: e.label, engine: e.engine } : { label: e.label, provider: e.provider as ModelProvider },
-        )
-      : undefined;
   const print = ctx.print;
   const controller = new AbortController();
   const onInt = () => {
@@ -139,116 +114,75 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
     controller.abort();
   };
   process.once("SIGINT", onInt);
-
-  let announced = false;
-  const onEvent = (e: RunEvent) => {
-    if (e.type === "state") {
-      if (e.state === "PREPARING") print(`Run ${e.runId}\nMaking a safe copy of the workspace…\n`);
-      if (e.state === "RUNNING" && !announced) {
-        announced = true; // RUNNING comes again after a spending pause
-        const using = first.engine ? cfg.label : `${cfg.model} via ${cfg.label}`;
-        print(
-          `${bot ? `${bot.name} is working` : "Working"} with ${using}${
-            chain && chain.length > 1
-              ? ` (then ${chain
-                  .slice(1)
-                  .map((c) => c.label)
-                  .join(", then ")} if it fails)`
-              : ""
-          }.${cfg.local ? " Each model step can take 10–30 s on this Mac." : ""}\n\n`,
-        );
-      }
-    } else if (e.type === "tool") {
-      const mark = e.blocked ? "⛔" : e.ok ? " " : "✗";
-      print(
-        `  ${String(e.seq).padStart(2)} ${mark} ${pad(e.name, 12)} ${pad(e.target || "", 40)} ${e.blocked ? `blocked (${e.blocked === "path" ? "outside the workspace" : "by the sandbox"})` : e.label}\n`,
-      );
-    } else if (e.type === "approval") {
-      print(`\n  ⏸ ${e.summary}\n`);
-      if (!ctx.prompt)
-        print(`    Approve with: covo approve ${e.runId.slice(-6)}    Stop it with: covo deny ${e.runId.slice(-6)}\n`);
-    } else if (e.type === "engine") {
-      if (e.phase === "start") print(`  ${e.label} is working in Covo's sandbox (file tools only)…\n`);
-      else if (e.ok)
-        print(
-          `  ${e.label} finished: ${e.turns} turn${e.turns === 1 ? "" : "s"}, ${(e.tokensIn + e.tokensOut).toLocaleString("en-US")} tokens, ${e.secs.toFixed(0)} s (on your subscription)\n`,
-        );
-      else print(`  ${e.label} stopped: ${e.error}\n`);
-    } else if (e.type === "fallback") {
-      print(`     (${e.from} failed: ${e.kind.replace("_", " ")}. Switching to ${e.to}.)\n`);
-    } else if (e.type === "recovered") {
-      print(`     (the bot typed its tool call as text; Covo understood it)\n`);
-    } else if (e.type === "model" && e.toolCalls === 0 && e.text.trim()) {
-      print(`     (the bot answered in words: "${pad(e.text.trim().replace(/\s+/g, " "), 60)}")\n`);
-    }
-  };
-
   try {
-    for (const w of skipped) print(`Skipping ${w}\n`);
-    for (const n of cap.notes) print(`Note: ${n}\n`);
+    for (const l of headerLines(prepared.header)) print(`${l}\n`);
     const r = await startRun({
-      home: ctx.home,
-      goal,
-      ...(bot ? { agentId: bot.id } : {}),
-      ...(chain ? { chain } : { provider: first.provider as ModelProvider }),
-      userHome: ctx.env.HOME ?? homedir(),
+      ...prepared.options,
       signal: controller.signal,
-      onEvent,
-      now: ctx.now,
-      maxConcurrent: cap.maxRuns,
-      spend: getLimits(ctx.home),
-      prices: loadUserPrices(ctx.home),
-      ...(ctx.prompt
-        ? {
-            askApproval: async () =>
-              /^y/i.test(await (ctx.prompt as NonNullable<Ctx["prompt"]>).ask("Let it continue? (y/N)", "n")),
-          }
-        : {}),
+      onEvent: eventPrinter(print, prepared.header, { interactive: ctx.prompt !== undefined }),
+      ...(ctx.prompt ? { askApproval: () => askToContinue(ctx) } : {}),
     });
-    const lines = [""];
-    // Asked about spending often? Offer a higher limit for this bot, so it asks less (ADR-010).
-    const limitTip = await suggestHigherLimit(ctx, r.runId);
-    if (limitTip) lines.push(limitTip, "");
-    const cost = r.costUsd > 0 ? `, ${usd(r.costUsd)}` : "";
-    const time = `${r.secs.toFixed(0)} s, ${r.steps} step${r.steps === 1 ? "" : "s"}, ${r.tokensIn + r.tokensOut} tokens${cost}`;
-    const short = r.runId.slice(-6);
-    if (r.state === "KEPT" && r.autoKeep) {
-      lines.push(`Done in ${time}.`, `Bot's summary: ${r.summary}`, "");
-      lines.push(`Kept in your workspace (${bot?.level === "full" ? "fully automatic" : "automatic"} bot):`);
-      for (const c of (r.diff?.changes ?? []).filter((c) => c.entry !== "dir"))
-        lines.push(`  ${c.kind.padEnd(8)} ${c.path}`);
-      lines.push("", `Changed your mind? Put everything back with: covo undo ${short}`);
-    } else if (r.state === "REVIEWING" && r.diff) {
-      lines.push(`Done in ${time}.`, `Bot's summary: ${r.summary}`, "");
-      if (r.autoKeep?.conflicts.length) {
-        lines.push(
-          "Not kept automatically: you changed these files while the bot worked, so you decide.",
-          ...r.autoKeep.conflicts.map((c) => `  ${c.path}`),
-          "",
-        );
-      }
-      lines.push(
-        `Changes waiting for you: ${r.diff.modified} modified, ${r.diff.added} added, ${r.diff.deleted} deleted.`,
-      );
-      for (const c of r.diff.changes.filter((c) => c.entry !== "dir")) lines.push(`  ${c.kind.padEnd(8)} ${c.path}`);
-      lines.push(
-        "",
-        "Nothing in your workspace has changed yet.",
-        `  See the changes:  covo diff ${short}`,
-        `  Keep them:        covo keep ${short}`,
-        `  Throw them away:  covo discard ${short}`,
-      );
-    } else if (r.state === "SUCCEEDED") {
-      lines.push(`Done in ${time}. No files were changed.`, `Bot's summary: ${r.summary}`);
-    } else if (r.state === "STOPPED") {
-      lines.push(`Stopped after ${time}: ${r.error}`, "The workspace copy was thrown away; your files are untouched.");
-    } else {
-      lines.push(`Failed after ${time}: ${r.error}`, "The workspace copy was thrown away; your files are untouched.");
-    }
-    lines.push(`Details: covo log ${r.runId}`, "");
-    return { code: ["REVIEWING", "SUCCEEDED", "KEPT"].includes(r.state) ? 0 : 1, out: lines.join("\n") };
+    return await finishLines(ctx, r, prepared.header);
   } catch (e) {
     if (e instanceof RunError) return { code: 1, out: `${e.message}\n` };
+    throw e;
+  } finally {
+    process.off("SIGINT", onInt);
+  }
+}
+
+/** Answers a spending pause from this terminal, for a run the service is doing. */
+function answerHere(ctx: Ctx, runId: string, yes: boolean): void {
+  withDb(ctx, (db) => {
+    const id = db
+      .query<{ id: string }, [string]>("SELECT id FROM approvals WHERE run_id = ? AND status = 'pending'")
+      .get(runId)?.id;
+    if (id) decide(db, id, yes ? "approved" : "denied", yes ? "you (terminal)" : "you (terminal)", ctx.now);
+  });
+}
+
+async function runWithService(ctx: Ctx, req: RunRequest): Promise<CliResult> {
+  const print = ctx.print;
+  let header: RunHeader | undefined;
+  let printer: ((e: RunEvent) => void) | undefined;
+  let job: string | undefined;
+  let runId: string | undefined;
+  const onInt = () => {
+    print("\nStopping after the current step…\n");
+    const id = runId ?? job;
+    if (id) void stopViaService(ctx.home, id);
+  };
+  process.once("SIGINT", onInt);
+  try {
+    const last = await runViaService(ctx.home, req, (m) => {
+      if (m.type === "queued") {
+        job = m.job;
+        if (m.position > 0) print(`Waiting: ${m.position} task${m.position === 1 ? "" : "s"} ahead of this one.\n`);
+      } else if (m.type === "waiting") print(`Waiting: ${m.reason}\n`);
+      else if (m.type === "header") {
+        header = m.header;
+        for (const l of headerLines(m.header)) print(`${l}\n`);
+        printer = eventPrinter(print, m.header, { interactive: ctx.prompt !== undefined });
+      } else if (m.type === "event") {
+        if (m.event.type === "state") runId = m.event.runId;
+        printer?.(m.event);
+        if (m.event.type === "approval" && ctx.prompt) {
+          const rid = m.event.runId;
+          void askToContinue(ctx).then((yes) => answerHere(ctx, rid, yes));
+        }
+      }
+    });
+    if (!last) {
+      return {
+        code: 1,
+        out: `\nLost contact with Covo's service. ${runId ? `Check the task with: covo log ${runId}` : "See: covo status"}\n`,
+      };
+    }
+    if (last.type === "error") return { code: 1, out: `${last.message}\n` };
+    if (last.type !== "done") return { code: 1, out: "The service ended the task without a result.\n" };
+    return await finishLines(ctx, last.summary, header as RunHeader);
+  } catch (e) {
+    if (e instanceof ServiceRefused) return { code: 1, out: `${e.message}\n` };
     throw e;
   } finally {
     process.off("SIGINT", onInt);

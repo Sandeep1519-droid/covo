@@ -223,9 +223,9 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
   let state: RunState = "QUEUED";
 
   db.query(
-    `INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, model, created_at)
-     VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?)`,
-  ).run(runId, agent.id, dept.id, o.trigger ?? "cli", o.goal, firstModel, started);
+    `INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, model, created_at, pid)
+     VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
+  ).run(runId, agent.id, dept.id, o.trigger ?? "cli", o.goal, firstModel, started, process.pid);
   appendAudit(
     db,
     {

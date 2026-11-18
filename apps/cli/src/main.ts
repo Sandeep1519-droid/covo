@@ -10,8 +10,11 @@ import { modelsCommand } from "./commands/models.ts";
 import { profileCommand } from "./commands/profile.ts";
 import { diffCommand, discardCommand, keepCommand, undoCommand } from "./commands/review.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
+import { type Launchctl, serviceCommand, stopCommand } from "./commands/service.ts";
 import { decideCommand, limitsCommand, pricesCommand, usageCommand } from "./commands/spend.ts";
 import type { Prompter } from "./prompt.ts";
+import { serviceHealth } from "./service/client.ts";
+import type { Running } from "./service/server.ts";
 
 const HELP = `covo ${VERSION}: Covo command line
 
@@ -24,7 +27,9 @@ Commands (Phase 1):
   doctor [check]      Check instant copies, the sandbox and the model
   models              Connect the AI you use (Claude, GPT, Gemini, local…); "covo models add"
   bots                Your bots, each with its own models and level; "covo bots create"
-  run "<task>"        Give a bot a task on a safe copy  [--bot <name>] [--model <saved model>]
+  run "<task>"        Give a bot a task on a safe copy  [--bot <name>] [--model <saved model>] [--here]
+  stop <run>          Stop a task Covo's service is running
+  service             Covo's background service: status, install, uninstall
   status              Show recent runs
   approve [run]       Let a paused task spend more ("covo deny" stops it instead)
   usage               What your bots spent, by model, bot and day  [--days N]
@@ -84,6 +89,10 @@ export interface Ctx {
   which?: (cmd: string) => string | null;
   /** Tests inject a scripted subscription engine here. */
   engine?: Engine;
+  /** Tests replace launchctl (covo service install/uninstall). */
+  launchctl?: Launchctl;
+  /** Tests learn when `covo service run` is up. */
+  serviceStarted?: (r: Running) => void;
 }
 
 export async function main(
@@ -105,6 +114,8 @@ export async function main(
       | "ollamaModels"
       | "which"
       | "engine"
+      | "launchctl"
+      | "serviceStarted"
     >
   > = {},
 ): Promise<CliResult> {
@@ -116,7 +127,17 @@ export async function main(
   if (cmd === "audit") return auditCommand(ctx, rest);
   if (cmd === "doctor") return doctorCommand(ctx, rest);
   if (cmd === "run") return runCommand(ctx, rest);
-  if (cmd === "status") return statusCommand(ctx);
+  if (cmd === "status") {
+    const r = statusCommand(ctx);
+    if (r.code !== 0) return r;
+    const h = await serviceHealth(ctx.home);
+    const line = h
+      ? `Covo's service: running, ${h.running} task${h.running === 1 ? "" : "s"} now, ${h.queued} waiting.`
+      : "Covo's service: not running (tasks run in your terminal; covo service install starts it).";
+    return { code: 0, out: `${r.out}${r.out.endsWith("\n\n") ? "" : "\n"}${line}\n` };
+  }
+  if (cmd === "service") return serviceCommand(ctx, rest);
+  if (cmd === "stop") return stopCommand(ctx, rest);
   if (cmd === "log") return logCommand(ctx, rest);
   if (cmd === "models") return modelsCommand(ctx, rest);
   if (cmd === "bots") return botsCommand(ctx, rest);

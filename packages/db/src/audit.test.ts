@@ -24,7 +24,7 @@ const tamper = (sql: string) => {
 
 describe("migrations", () => {
   test("apply once and are recorded", () => {
-    expect(schemaVersion(db)).toBe(4);
+    expect(schemaVersion(db)).toBe(5);
     expect(migrate(db, now)).toEqual([]);
   });
 });

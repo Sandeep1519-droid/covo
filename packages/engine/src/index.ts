@@ -18,6 +18,7 @@ export { DEFAULT_LIMITS, NUDGE, runLoop } from "./loop.ts";
 export type { Capacity, LocalModel, Profile, ProfileName } from "./profile.ts";
 export { capacity, PROFILES, paramsOf, profileForMemory, suggestLocalModel } from "./profile.ts";
 export { systemPrompt, taskMessage } from "./prompt.ts";
+export { processAlive, recoverStaleRuns } from "./recover.ts";
 export type { FileReview, KeepOutcome, Review, UndoOutcome } from "./review.ts";
 export { discardRun, keepChanges, keepRun, reviewRun, UNDO_MAX_AGE_MS, UNDO_MAX_BYTES, undoRun } from "./review.ts";
 export type { EngineEntry, RunChainEntry, RunEvent, RunSummary, StartRunOptions } from "./run.ts";
