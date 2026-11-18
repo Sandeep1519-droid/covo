@@ -2,8 +2,16 @@ import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { covoPaths, tildify } from "@covo/core";
 import { auditForRun, openDb } from "@covo/db";
-import { type Bot, findBot, RunError, type RunEvent, startRun } from "@covo/engine";
-import { type ModelConfig, ModelConfigError, type ModelProvider, providerFromConfig, resolveModel } from "@covo/models";
+import { type Bot, findBot, RunError, type RunEvent, startRun, usd } from "@covo/engine";
+import {
+  getLimits,
+  loadUserPrices,
+  type ModelConfig,
+  ModelConfigError,
+  type ModelProvider,
+  providerFromConfig,
+  resolveModel,
+} from "@covo/models";
 import { SecretError, secrets } from "@covo/platform";
 import type { CliResult, Ctx } from "../main.ts";
 
@@ -94,10 +102,12 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   };
   process.once("SIGINT", onInt);
 
+  let announced = false;
   const onEvent = (e: RunEvent) => {
     if (e.type === "state") {
       if (e.state === "PREPARING") print(`Run ${e.runId}\nMaking a safe copy of the workspace…\n`);
-      if (e.state === "RUNNING")
+      if (e.state === "RUNNING" && !announced) {
+        announced = true; // RUNNING comes again after a spending pause
         print(
           `${bot ? `${bot.name} is working` : "Working"} with ${cfg.model} via ${cfg.label}${
             chain
@@ -108,11 +118,16 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
               : ""
           }.${cfg.local ? " Each model step can take 10–30 s on this Mac." : ""}\n\n`,
         );
+      }
     } else if (e.type === "tool") {
       const mark = e.blocked ? "⛔" : e.ok ? " " : "✗";
       print(
         `  ${String(e.seq).padStart(2)} ${mark} ${pad(e.name, 12)} ${pad(e.target || "", 40)} ${e.blocked ? `blocked (${e.blocked === "path" ? "outside the workspace" : "by the sandbox"})` : e.label}\n`,
       );
+    } else if (e.type === "approval") {
+      print(`\n  ⏸ ${e.summary}\n`);
+      if (!ctx.prompt)
+        print(`    Approve with: covo approve ${e.runId.slice(-6)}    Stop it with: covo deny ${e.runId.slice(-6)}\n`);
     } else if (e.type === "fallback") {
       print(`     (${e.from} failed: ${e.kind.replace("_", " ")}. Switching to ${e.to}.)\n`);
     } else if (e.type === "recovered") {
@@ -132,9 +147,18 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       signal: controller.signal,
       onEvent,
       now: ctx.now,
+      spend: getLimits(ctx.home),
+      prices: loadUserPrices(ctx.home),
+      ...(ctx.prompt
+        ? {
+            askApproval: async () =>
+              /^y/i.test(await (ctx.prompt as NonNullable<Ctx["prompt"]>).ask("Let it continue? (y/N)", "n")),
+          }
+        : {}),
     });
     const lines = [""];
-    const time = `${r.secs.toFixed(0)} s, ${r.steps} step${r.steps === 1 ? "" : "s"}, ${r.tokensIn + r.tokensOut} tokens`;
+    const cost = r.costUsd > 0 ? `, ${usd(r.costUsd)}` : "";
+    const time = `${r.secs.toFixed(0)} s, ${r.steps} step${r.steps === 1 ? "" : "s"}, ${r.tokensIn + r.tokensOut} tokens${cost}`;
     if (r.state === "REVIEWING" && r.diff) {
       lines.push(`Done in ${time}.`, `Bot's summary: ${r.summary}`, "");
       lines.push(

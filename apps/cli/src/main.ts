@@ -8,6 +8,7 @@ import { initCommand } from "./commands/init.ts";
 import { modelsCommand } from "./commands/models.ts";
 import { diffCommand, discardCommand, keepCommand } from "./commands/review.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
+import { decideCommand, limitsCommand, pricesCommand, usageCommand } from "./commands/spend.ts";
 import type { Prompter } from "./prompt.ts";
 
 const HELP = `covo ${VERSION}: Covo command line
@@ -23,6 +24,10 @@ Commands (Phase 1):
   bots                Your bots, each with its own models and level; "covo bots create"
   run "<task>"        Give a bot a task on a safe copy  [--bot <name>] [--model <saved model>]
   status              Show recent runs
+  approve [run]       Let a paused task spend more ("covo deny" stops it instead)
+  usage               What your bots spent, by model, bot and day  [--days N]
+  limits              Spending limits per task and per day  [--task <amount>] [--day <amount>]
+  prices              Model prices Covo uses  [set <model> <in> <out>]
   log <run>           Show a run's steps ("last" for the latest)
   diff <run>          Show what a run changed  [--stat for a summary]
   keep <run> [file…]  Copy a run's changes into your workspace (all, or just these files)
@@ -90,6 +95,11 @@ export async function main(
   if (cmd === "log") return logCommand(ctx, rest);
   if (cmd === "models") return modelsCommand(ctx, rest);
   if (cmd === "bots") return botsCommand(ctx, rest);
+  if (cmd === "approve") return decideCommand(ctx, rest, true);
+  if (cmd === "deny") return decideCommand(ctx, rest, false);
+  if (cmd === "usage") return usageCommand(ctx, rest);
+  if (cmd === "limits") return limitsCommand(ctx, rest);
+  if (cmd === "prices") return pricesCommand(ctx, rest);
   if (cmd === "diff") return diffCommand(ctx, rest);
   if (cmd === "keep") return keepCommand(ctx, rest);
   if (cmd === "discard") return discardCommand(ctx, rest);

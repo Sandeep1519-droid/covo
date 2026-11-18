@@ -3,9 +3,10 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, realpathSync } from
 import { join } from "node:path";
 import { canonicalJson, covoPaths, newId, sha256Hex } from "@covo/core";
 import { appendAudit, DEFAULT_AGENT_ID, migrate, openDb } from "@covo/db";
-import { type ChainEntry, type ChatMessage, FallbackProvider, type ModelProvider } from "@covo/models";
+import { type ChainEntry, type ChatMessage, FallbackProvider, type ModelProvider, type Price } from "@covo/models";
 import { cloner, sandbox as defaultSandbox, type Sandbox, type WorkspaceCloner } from "@covo/platform";
 import { CowWorkspaces, type DiffSummary } from "@covo/sandbox";
+import { type AskApproval, Budget, type SpendLimits, type SpendRequest } from "./budget.ts";
 import { type LoopLimits, type ModelTurn, runLoop } from "./loop.ts";
 import { systemPrompt, taskMessage } from "./prompt.ts";
 import { type RunState, recordState } from "./state.ts";
@@ -26,6 +27,7 @@ export type RunEvent =
   | ({ type: "model" } & ModelTurn)
   | { type: "recovered"; count: number }
   | { type: "fallback"; from: string; to: string; kind: string; error: string }
+  | ({ type: "approval" } & SpendRequest)
   | {
       type: "tool";
       seq: number;
@@ -52,6 +54,13 @@ export interface StartRunOptions {
   signal?: AbortSignal;
   now?: () => number;
   onEvent?(e: RunEvent): void;
+  /** Spending limits; the bot's own task limit, if set, replaces `runUsd`. Default: none. */
+  spend?: SpendLimits;
+  /** Your own model prices (~/Covo/prices.json). */
+  prices?: Record<string, Price>;
+  /** Answers a spending pause directly; without it the run waits for `covo approve`. */
+  askApproval?: AskApproval;
+  approvalPollMs?: number;
 }
 
 export interface RunSummary {
@@ -62,13 +71,14 @@ export interface RunSummary {
   steps: number;
   tokensIn: number;
   tokensOut: number;
+  costUsd: number;
   secs: number;
   diff?: DiffSummary;
 }
 
 export class RunError extends Error {}
 
-const ACTIVE: RunState[] = ["QUEUED", "PREPARING", "RUNNING"];
+const ACTIVE: RunState[] = ["QUEUED", "PREPARING", "RUNNING", "AWAITING_APPROVAL"];
 
 /** What the tool acted on, for logs: the path or command. */
 function targetOf(args: Record<string, unknown> | undefined): string {
@@ -106,9 +116,17 @@ export async function startRun(o: StartRunOptions): Promise<RunSummary> {
 
 async function execute(db: Database, runsDir: string, o: StartRunOptions, now: () => number): Promise<RunSummary> {
   const agent = db
-    .query<{ id: string; name: string; purpose: string; department_id: string; status: string }, [string]>(
-      "SELECT id, name, purpose, department_id, status FROM agents WHERE id = ?",
-    )
+    .query<
+      {
+        id: string;
+        name: string;
+        purpose: string;
+        department_id: string;
+        status: string;
+        run_limit_usd: number | null;
+      },
+      [string]
+    >("SELECT id, name, purpose, department_id, status, run_limit_usd FROM agents WHERE id = ?")
     .get(o.agentId ?? DEFAULT_AGENT_ID);
   if (!agent) throw new RunError(`No bot with id ${o.agentId ?? DEFAULT_AGENT_ID}.`);
   if (agent.status !== "active") throw new RunError(`${agent.name} is ${agent.status}, so it can't take tasks.`);
@@ -189,6 +207,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
 
   let tokensIn = 0;
   let tokensOut = 0;
+  let budgetRef: Budget | undefined;
   let steps = 0;
   try {
     setState("PREPARING");
@@ -205,6 +224,23 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
     ];
     for (const m of initial) transcript(m);
     const sb = o.sandbox ?? defaultSandbox();
+    const budget = new Budget({
+      db,
+      runId,
+      botName: agent.name,
+      limits: {
+        runUsd: agent.run_limit_usd ?? o.spend?.runUsd ?? null,
+        dayUsd: o.spend?.dayUsd ?? null,
+      },
+      prices: o.prices ?? {},
+      now,
+      setState: (st) => setState(st),
+      onRequest: (req) => o.onEvent?.({ type: "approval", ...req }),
+      ask: o.askApproval,
+      pollMs: o.approvalPollMs,
+      signal: o.signal,
+    });
+    budgetRef = budget;
 
     const result = await runLoop({
       provider,
@@ -216,6 +252,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       exec: (name, args) =>
         runTool(name, args, { ws, tmp, sandbox: sb, commandTimeoutMs: o.commandTimeoutMs ?? 60_000 }),
       hooks: {
+        beforeModel: (messages) => budget.check(provider.id, messages),
         onRecovered: (count) => o.onEvent?.({ type: "recovered", count }),
         onModel: (t) => {
           // Read at each step: a fallback may have switched models mid-run.
@@ -225,9 +262,23 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
             args_json: canonicalJson({ tokensIn: t.tokensIn, tokensOut: t.tokensOut, secs: t.secs }),
             result_preview: t.text.slice(0, 2000) || null,
           });
+          const cost = budget.record(pid, t.tokensIn, t.tokensOut);
           db.query(
-            "INSERT INTO budget_ledger (ts, run_id, agent_id, department_id, tier, provider, model, tokens_in, tokens_out, usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
-          ).run(now(), runId, agent.id, dept.id, tier, pid.split(":")[0] ?? "unknown", pid, t.tokensIn, t.tokensOut);
+            "INSERT INTO budget_ledger (ts, run_id, agent_id, department_id, tier, provider, model, tokens_in, tokens_out, usd, estimated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          ).run(
+            now(),
+            runId,
+            agent.id,
+            dept.id,
+            tier,
+            pid.split(":")[0] ?? "unknown",
+            pid,
+            t.tokensIn,
+            t.tokensOut,
+            cost.usd,
+            cost.estimated ? 1 : 0,
+          );
+          db.query("UPDATE runs SET cost_usd = ? WHERE id = ?").run(budget.runSpent, runId);
           o.onEvent?.({ type: "model", ...t });
         },
         onTool: (s) => {
@@ -278,7 +329,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
     db.query("UPDATE runs SET tokens_in = ?, tokens_out = ? WHERE id = ?").run(tokensIn, tokensOut, runId);
 
     const out = result.outcome;
-    const base = { runId, steps, tokensIn, tokensOut, secs: (now() - started) / 1000 };
+    const base = { runId, steps, tokensIn, tokensOut, costUsd: budget.runSpent, secs: (now() - started) / 1000 };
     if (out.kind === "finished") {
       const diff = cow.diff(runId);
       const changed = diff.added + diff.modified + diff.deleted > 0;
@@ -297,6 +348,15 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
     const msg = (e as Error).message;
     if (existsSync(runDir)) cow.dropCopy(runId);
     setState("FAILED", { error: msg });
-    return { runId, state, error: msg, steps, tokensIn, tokensOut, secs: (now() - started) / 1000 };
+    return {
+      runId,
+      state,
+      error: msg,
+      steps,
+      tokensIn,
+      tokensOut,
+      costUsd: budgetRef?.runSpent ?? 0,
+      secs: (now() - started) / 1000,
+    };
   }
 }

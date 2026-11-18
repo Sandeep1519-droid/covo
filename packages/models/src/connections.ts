@@ -22,10 +22,21 @@ export interface Connection {
   addedAt: number;
 }
 
+export interface Limits {
+  /** Most one task may spend, in US dollars; null = no limit. */
+  runUsd: number | null;
+  /** Most all bots together may spend per day (your local midnight to midnight). */
+  dayUsd: number | null;
+}
+
+/** Defaults: generous for real work, small enough that a runaway task can't cost much. */
+export const DEFAULT_LIMITS: Limits = { runUsd: 1, dayUsd: 5 };
+
 export interface Settings {
   version: 1;
   default?: string;
   connections: Connection[];
+  limits?: Partial<Limits>;
 }
 
 const EMPTY: Settings = { version: 1, connections: [] };
@@ -38,7 +49,12 @@ export function loadSettings(home: string): Settings {
   if (!existsSync(p)) return structuredClone(EMPTY);
   try {
     const s = JSON.parse(readFileSync(p, "utf8")) as Settings;
-    return { version: 1, connections: Array.isArray(s.connections) ? s.connections : [], default: s.default };
+    return {
+      version: 1,
+      connections: Array.isArray(s.connections) ? s.connections : [],
+      default: s.default,
+      ...(s.limits ? { limits: s.limits } : {}),
+    };
   } catch (e) {
     throw new ModelConfigError(`${p} is damaged (${(e as Error).message}). Fix or delete it.`);
   }
@@ -159,4 +175,24 @@ export async function resolveModel(
     cfg.keySource = "the Keychain";
   }
   return cfg;
+}
+
+export function getLimits(home: string): Limits {
+  const l = loadSettings(home).limits ?? {};
+  return {
+    runUsd: l.runUsd === undefined ? DEFAULT_LIMITS.runUsd : l.runUsd,
+    dayUsd: l.dayUsd === undefined ? DEFAULT_LIMITS.dayUsd : l.dayUsd,
+  };
+}
+
+export function setLimits(home: string, changes: Partial<Limits>): Limits {
+  for (const v of Object.values(changes)) {
+    if (v !== null && (!Number.isFinite(v) || (v as number) < 0)) {
+      throw new ModelConfigError("A limit must be a dollar amount of 0 or more, or none.");
+    }
+  }
+  const s = loadSettings(home);
+  s.limits = { ...s.limits, ...changes };
+  saveSettings(home, s);
+  return getLimits(home);
 }

@@ -6,6 +6,7 @@ export type RunState =
   | "QUEUED"
   | "PREPARING"
   | "RUNNING"
+  | "AWAITING_APPROVAL"
   | "REVIEWING"
   | "SUCCEEDED"
   | "STOPPED"

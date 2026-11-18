@@ -42,6 +42,8 @@ export interface ToolStep {
 }
 
 export interface LoopHooks {
+  /** Runs before each model call; returning a reason stops the run (e.g. a spending limit you declined). */
+  beforeModel?(messages: ChatMessage[]): Promise<string | undefined> | string | undefined;
   onModel?(t: ModelTurn): void | Promise<void>;
   onTool?(s: ToolStep): void | Promise<void>;
   /** Tool calls were recovered from the reply's text. */
@@ -89,6 +91,10 @@ export async function runLoop(input: LoopInput): Promise<LoopResult> {
     if (now() - started > limits.maxMs) {
       return done({ kind: "stopped", reason: `Time limit reached (${Math.round(limits.maxMs / 60_000)} min).` });
     }
+
+    const stopReason = await input.hooks?.beforeModel?.(messages);
+    if (stopReason) return done({ kind: "stopped", reason: stopReason });
+    if (input.signal?.aborted) return done({ kind: "stopped", reason: "Stopped by you." });
 
     const t0 = now();
     const r = await collect(input.provider.chat({ messages, tools: input.tools }, input.signal));

@@ -9,15 +9,18 @@ export {
   modelConfig,
   providerFromConfig,
 } from "./config.ts";
-export type { AddConnection, Connection, Resolved, Settings } from "./connections.ts";
+export type { AddConnection, Connection, Limits, Resolved, Settings } from "./connections.ts";
 export {
   addConnection,
+  DEFAULT_LIMITS,
+  getLimits,
   loadSettings,
   NAME_RE,
   removeConnection,
   resolveModel,
   saveSettings,
   setDefault,
+  setLimits,
   settingsPath,
   suggestName,
 } from "./connections.ts";
@@ -34,6 +37,8 @@ export type { OpenAICompatibleOptions } from "./openai-compatible.ts";
 export { listModels, OpenAICompatibleProvider, parseStream, toWire } from "./openai-compatible.ts";
 export type { Preset, ProviderKind } from "./presets.ts";
 export { PRESETS, presetById, presetForUrl } from "./presets.ts";
+export type { Price, PriceLookup } from "./prices.ts";
+export { CAUTIOUS_ESTIMATE, costOf, loadUserPrices, PRICES_AS_OF, priceFor, pricesPath } from "./prices.ts";
 export type {
   ChatMessage,
   ChatRequest,

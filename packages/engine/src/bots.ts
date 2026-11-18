@@ -18,6 +18,8 @@ export interface Bot {
   /** Saved model names (or model names) in order; empty means "the default model". */
   models: string[];
   level: Level;
+  /** This bot's own spending limit per task, in dollars; null = the general one. */
+  taskLimitUsd: number | null;
   status: "active" | "paused" | "archived";
   shape: string;
   color: string;
@@ -35,6 +37,7 @@ interface Row {
   department: string;
   model_chain: string;
   level: Level;
+  run_limit_usd: number | null;
   status: Bot["status"];
   avatar_shape: string;
   avatar_color: string;
@@ -42,7 +45,7 @@ interface Row {
   last_run: number | null;
 }
 
-const SELECT = `SELECT a.id, a.name, a.purpose, d.name AS department, a.model_chain, a.level, a.status,
+const SELECT = `SELECT a.id, a.name, a.purpose, d.name AS department, a.model_chain, a.level, a.run_limit_usd, a.status,
     a.avatar_shape, a.avatar_color,
     (SELECT COUNT(*) FROM runs r WHERE r.agent_id = a.id) AS runs,
     (SELECT MAX(created_at) FROM runs r WHERE r.agent_id = a.id) AS last_run
@@ -55,6 +58,7 @@ const toBot = (r: Row): Bot => ({
   department: r.department,
   models: JSON.parse(r.model_chain) as string[],
   level: r.level,
+  taskLimitUsd: r.run_limit_usd,
   status: r.status,
   shape: r.avatar_shape,
   color: r.avatar_color,
@@ -78,6 +82,11 @@ function checkName(name: string): string {
   const n = name.trim().replace(/\s+/g, " ");
   if (!n || n.length > 40) throw new RunError("A bot's name must be 1–40 characters.");
   return n;
+}
+
+function checkLimit(v: number | null): number | null {
+  if (v !== null && (!Number.isFinite(v) || v < 0)) throw new RunError("A limit must be a dollar amount of 0 or more.");
+  return v;
 }
 
 function checkModels(models: string[]): string[] {
@@ -116,6 +125,7 @@ export interface NewBot {
   purpose?: string;
   models?: string[];
   level?: Level;
+  taskLimitUsd?: number | null;
   departmentId?: string;
 }
 
@@ -136,9 +146,20 @@ export function createBot(home: string, b: NewBot, now: () => number = Date.now)
     const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)] as T;
     db.transaction(() => {
       db.query(
-        `INSERT INTO agents (id, department_id, name, avatar_shape, avatar_color, purpose, model_chain, level, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(id, dept, name, pick(SHAPES), pick(COLORS), b.purpose?.trim() ?? "", JSON.stringify(models), level, now());
+        `INSERT INTO agents (id, department_id, name, avatar_shape, avatar_color, purpose, model_chain, level, run_limit_usd, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        dept,
+        name,
+        pick(SHAPES),
+        pick(COLORS),
+        b.purpose?.trim() ?? "",
+        JSON.stringify(models),
+        level,
+        checkLimit(b.taskLimitUsd ?? null),
+        now(),
+      );
       appendAudit(
         db,
         { actor: "user", action: "bot.created", target: id, detail: { name, models, level, department: dept } },
@@ -154,13 +175,15 @@ export interface BotChanges {
   purpose?: string;
   models?: string[];
   level?: Level;
+  /** Dollars per task; null = use the general limit. */
+  taskLimitUsd?: number | null;
 }
 
 export function updateBot(home: string, nameOrId: string, c: BotChanges, now: () => number = Date.now): Bot {
   return withDb(home, now, (db) => {
     const r = find(db, nameOrId);
     const sets: string[] = [];
-    const vals: (string | number)[] = [];
+    const vals: (string | number | null)[] = [];
     const changed: Record<string, unknown> = {};
     if (c.name !== undefined) {
       const name = checkName(c.name);
@@ -190,6 +213,12 @@ export function updateBot(home: string, nameOrId: string, c: BotChanges, now: ()
       sets.push("level = ?");
       vals.push(c.level);
       changed.level = c.level;
+    }
+    if (c.taskLimitUsd !== undefined) {
+      const v = checkLimit(c.taskLimitUsd);
+      sets.push("run_limit_usd = ?");
+      vals.push(v);
+      changed.taskLimitUsd = v;
     }
     if (!sets.length) return toBot(r);
     db.transaction(() => {

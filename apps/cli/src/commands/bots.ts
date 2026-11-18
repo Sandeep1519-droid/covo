@@ -8,6 +8,7 @@ import {
   listBots,
   RunError,
   updateBot,
+  usd,
 } from "@covo/engine";
 import { loadSettings } from "@covo/models";
 import type { CliResult, Ctx } from "../main.ts";
@@ -26,6 +27,7 @@ Options:
   --default-model       Use the default model again
   --purpose "<text>"    One line about what it's for
   --level <level>       supervised, automatic (default) or full
+  --task-limit <amount> Most it may spend on one task, in dollars (or "none" for the general limit)
   --rename "<name>"     New name (set only)
 
 Example:
@@ -55,7 +57,15 @@ function parse(args: string[]): { name?: string; changes: BotChanges; error?: st
     else if (a === "--fallback") fallbacks.push(val());
     else if (a === "--default-model") resetModels = true;
     else if (a === "--purpose") changes.purpose = val();
-    else if (a === "--rename") changes.name = val();
+    else if (a === "--task-limit") {
+      const v = val();
+      if (/^(none|off)$/i.test(v)) changes.taskLimitUsd = null;
+      else {
+        const n = Number(v.replace(/^[$]/, ""));
+        if (!Number.isFinite(n) || n < 0) throw new RunError(`"${v}" isn't a dollar amount.`);
+        changes.taskLimitUsd = n;
+      }
+    } else if (a === "--rename") changes.name = val();
     else if (a === "--level") {
       const l = val().toLowerCase() as Level;
       if (!LEVELS.includes(l)) throw new RunError(`Level must be one of: ${LEVELS.join(", ")}.`);
@@ -93,6 +103,7 @@ export function botsCommand(ctx: Ctx, args: string[]): CliResult {
         `Created ${b.name}.`,
         `  Models  ${modelsText(b)}`,
         `  Level   ${b.level}: ${LEVEL_TEXT[b.level]}`,
+        ...(b.taskLimitUsd !== null ? [`  Limit   ${usd(b.taskLimitUsd)} per task`] : []),
         ...(b.purpose ? [`  Purpose ${b.purpose}`] : []),
         ...unknownModels(ctx, changes.models),
         "",
@@ -109,6 +120,7 @@ export function botsCommand(ctx: Ctx, args: string[]): CliResult {
         `Updated ${b.name}.`,
         `  Models  ${modelsText(b)}`,
         `  Level   ${b.level}: ${LEVEL_TEXT[b.level]}`,
+        `  Limit   ${b.taskLimitUsd === null ? "the general per-task limit" : `${usd(b.taskLimitUsd)} per task`}`,
         ...unknownModels(ctx, changes.models),
         "",
       ];
