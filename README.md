@@ -9,6 +9,7 @@ Open-source AI coworkers that run on your own Mac. Bots work on instant copies o
 - [Engineering blueprint](docs/BLUEPRINT.md): architecture, data model and the 6-phase roadmap
 - [Phase 1 plan](docs/PHASE1.md): milestones M0–M6 for the sandboxed runner (done)
 - [Phase 2](docs/PHASE2.md) (done): connect any AI (keys, subscriptions, local), automation levels with undo, spending limits, power profiles
+- [Phase 3 plan](docs/PHASE3.md): the background service, the chat app, a Mac menu bar app, phone approvals over Telegram, routines and a daily summary
 - [Screen map](design/screen-map.html): every screen in the app and where each button goes
 
 ## Development

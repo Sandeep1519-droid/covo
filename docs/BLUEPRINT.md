@@ -1515,8 +1515,8 @@ The local model writes the one-line check-in summary from the last steps (cheap,
 | Phase | Theme | You can… | Est. |
 |---|---|---|---|
 | **1** ✅ | Sandboxed runner core | Run a bot on a safe copy, review, keep or discard, verify the log | done |
-| **2** | Connect any AI, automation and control | Add your Claude/GPT/Gemini key or subscription; bots keep undoable work by themselves; spending limits; power profiles ([PHASE2.md](PHASE2.md)) | ≈ 3–4 weeks |
-| **3** | The app and your phone | Use the chat app from the Figma design; approve from your phone (Telegram); schedule routines with daily summaries; menu bar icon | ≈ 3–4 weeks |
+| **2** ✅ | Connect any AI, automation and control | Add your Claude/GPT/Gemini key or subscription; bots keep undoable work by themselves; spending limits; power profiles ([PHASE2.md](PHASE2.md)) | done |
+| **3** | The app and your phone | Use the chat app from the Figma design; approve from your phone (Telegram); schedule routines with daily summaries; menu bar icon ([PHASE3.md](PHASE3.md)) | ≈ 4–5 weeks |
 | **4** | Vault, signed rules, memory, watchdog | Touch ID guards limits and rules; internet allowlist; memory you can read and undo; stuck bots stopped and rolled back | ≈ 3 weeks |
 | **5** | Browser and Take the Wheel | Bots use web apps with your sessions; risky clicks checked; you step in for 2FA | ≈ 3 weeks |
 | **6** | Teach Mode, importer, Windows, hardening | Teach a workflow twice; import OpenClaw/Hermes skills; start the Windows port; prompt-injection test suite | ≈ 3–4 weeks |
