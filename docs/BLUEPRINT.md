@@ -1510,6 +1510,20 @@ The local model writes the one-line check-in summary from the last steps (cheap,
 
 ## 5. Solo Developer Phased Execution Plan
 
+### Revised roadmap (2026-11-18, see ADR-008 to ADR-012)
+
+| Phase | Theme | You can… | Est. |
+|---|---|---|---|
+| **1** ✅ | Sandboxed runner core | Run a bot on a safe copy, review, keep or discard, verify the log | done |
+| **2** | Connect any AI, automation and control | Add your Claude/GPT/Gemini key or subscription; bots keep undoable work by themselves; spending limits; power profiles ([PHASE2.md](PHASE2.md)) | ≈ 3–4 weeks |
+| **3** | The app and your phone | Use the chat app from the Figma design; approve from your phone (Telegram); schedule routines with daily summaries; menu bar icon | ≈ 3–4 weeks |
+| **4** | Vault, signed rules, memory, watchdog | Touch ID guards limits and rules; internet allowlist; memory you can read and undo; stuck bots stopped and rolled back | ≈ 3 weeks |
+| **5** | Browser and Take the Wheel | Bots use web apps with your sessions; risky clicks checked; you step in for 2FA | ≈ 3 weeks |
+| **6** | Teach Mode, importer, Windows, hardening | Teach a workflow twice; import OpenClaw/Hermes skills; start the Windows port; prompt-injection test suite | ≈ 3–4 weeks |
+
+The phase texts below were written before this review. Their build items still apply, but they are regrouped as above: Phase 2's vault and policy move to Phase 4, the dashboard moves to Phase 3, and provider work moves to Phase 2.
+
+
 Each phase ends with a demo script you can run. Estimates assume evenings/weekends; adjust freely.
 
 ### Phase 1 — Sandboxed runner core (≈ 2 weeks)
@@ -1664,3 +1678,82 @@ Update (2026-11-17): both themes are monochrome (white primary buttons on dark, 
 ### ADR-007 — Name: Covo Bot (2026-11-18)
 
 The product is **Covo Bot**, replacing the codename Coworker. "Covo" is Italian for a den or hideout, matching the core promise: bots work in a safe, sealed copy and nothing leaves without your OK. Short forms: command `covo`, daemon `covod`, packages `@covo/*`, data folder `~/Covo`, settings `COVO_*`. The npm name `covo` was free on 2026-11-18. Before launch, run a trademark search (USPTO, WIPO Global Brand Database) and pick a domain.
+
+## 8. Direction review (2026-11-18)
+
+After Phase 1, the plan was checked against the competition and against how people will actually use Covo Bot. These decisions supersede earlier text where they conflict. Anything here can be revisited later.
+
+### ADR-008 — Positioning: the agent you can trust with your Mac
+
+On the day of this review, GitHub showed: OpenClaw 394,700 stars and 3,807 contributors; Hermes Agent 264,294 stars and 6,534 contributors; CopilotKit OpenBot 12,780 stars. Grok Bot is backed by xAI and Cursor. MausBot already offers any model, 16 agent engines (including Claude Code and Codex), local models and phone apps. A solo project cannot win on feature count, integrations or speed.
+
+Covo Bot competes on **trust**:
+- every change is undoable
+- a tricked bot is sealed off by macOS
+- a bot can't raise its own limits
+- there is a tamper-proof record of what bots did
+- it's free, local, and light enough for an 8 GB Mac
+
+The marketing line is "the AI coworker you can trust with your real files and your money." Features that only reach parity (model choice, phone approvals, an app) are still required, but they're entry tickets, not the pitch. Proof beats claims: a short video where a poisoned email tries to steal an SSH key and Covo blocks and logs it.
+
+Realistic goals:
+- a working app with model connections in about 2 months
+- 100 real users or stars in about 6 months
+- about 1,000 stars in a year
+
+Work with the large projects, not against them: import their Agent Skills (ADR-004), and later consider offering Covo's sandbox-and-review as a safety layer for other agents.
+
+### ADR-009 — Any AI the user has: API keys, subscriptions, local models
+
+Qwen was only the free model used to build and test at $0. Covo Bot must use whatever the user already has:
+
+| Kind | How it connects | Phase |
+|---|---|---|
+| **API key**: Anthropic (Claude), OpenAI (GPT), Google (Gemini), xAI (Grok), DeepSeek, Mistral, Groq, OpenRouter | Native Anthropic provider; OpenAI-compatible provider for the rest (already built) | 2 |
+| **Subscription**: Claude Pro/Max, ChatGPT Plus/Pro, Gemini plans | Run the official CLI the user installed and signed into (Claude Code, Codex CLI, Gemini CLI) as an "engine", inside the sandbox | 2, after a terms check |
+| **Local**: Ollama, LM Studio | Native Ollama provider (built in M6), OpenAI-compatible for the rest | built |
+
+Rules:
+- Keys are stored in the macOS Keychain, never in plain files.
+- Each bot has its own model, with a fallback chain for when a key hits a rate limit, a subscription hits its cap, or a service is down.
+- Setup detects what the user already has (keys in the Keychain, signed-in CLIs, Ollama) and suggests the best default. The local model is the fallback for people with nothing.
+- **Subscriptions: terms first.** Before building any subscription engine, record each provider's current terms in `docs/SUBSCRIPTIONS.md`. Build only what the terms allow, keep it opt-in, and never copy or reuse login tokens. This refines ADR-003.
+
+### ADR-010 — Automation levels: undoable work runs by itself, irreversible actions ask
+
+Approving every change defeats automation. The rule is: **if it can be undone, the bot just does it; if it can't, the bot asks.**
+
+| Action | Default |
+|---|---|
+| Create, edit, move or delete files in the workspace | Automatic, kept, undoable |
+| Read, label, archive or draft (email, docs) | Automatic |
+| Scheduled routines | Automatic, with a summary afterwards |
+| Send a message to a real person, spend money, delete permanently, use a new website or service | Ask (CLI now, phone in Phase 3) |
+| Anything over the spending limit | Ask, or stop when fully automatic |
+
+Each bot has a level:
+1. **Supervised**: review before keeping (Phase 1 behaviour; for new or untrusted bots).
+2. **Automatic** (default): undoable work is kept automatically; only irreversible actions ask.
+3. **Fully automatic**: never asks, stays inside hard limits, and stops when it hits one.
+
+Supporting pieces:
+- **Undo**: before a run's changes are kept, the files they replace or delete are saved as instant clones, and `covo undo <run>` restores them.
+- **"Always allow"**: after the same kind of approval is given three times, the bot offers to always allow it. The choice is saved as a rule the user can see and remove.
+- **Hard limits** (budget, allowed websites, permanent deletes) can be loosened only by the user, never by a bot. The sandbox already hides Covo's own data from bots. Touch ID signing of the rules file (Phase 4) makes this cryptographic.
+
+### ADR-011 — Power profiles: scale with the Mac
+
+Covo detects the Mac and picks a profile. The user can override it.
+
+| Memory | Bots at once | Suggested local model | Context |
+|---|---|---|---|
+| 8 GB | 1 | ~4B (qwen3.5:4b) | 8K |
+| 16 GB | 2 | ~8B | 32K |
+| 32–48 GB | 3–4 | 14–30B | 64K |
+| 64 GB+ | 6+ | 70B-class | 128K |
+
+A profile also sets model keep-alive, browser slots, and slowdown on battery or heat. With cloud models, memory stops being the limit (the thinking happens on the provider's servers), so concurrency is limited by tools and by the spending limits instead. Later, users can run Covo on a spare Mac, a Linux box or a rented server they control, so bots keep working while the laptop is closed. That stays self-hosted and free, with no Covo server.
+
+### ADR-012 — Phase order: connect any AI first, then the app
+
+The app and phone approvals move earlier because every competitor has them and nobody will use a CLI-only product. The new order is in §5 "Revised roadmap". The detailed specs in §4 and the old phase texts stay as reference.

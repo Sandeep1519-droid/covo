@@ -17,7 +17,7 @@ and the following happens:
 4. You see a **diff** of what changed, then **keep** or **discard** it.
 5. Every step is written to a **tamper-evident log** you can verify.
 
-There is no app window yet. The chat UI from Figma comes in Phase 4. Phase 1 is the safe engine everything else stands on.
+There is no app window yet. The chat UI from Figma comes in Phase 3 (moved up from Phase 4 on 18 Nov; see BLUEPRINT ADR-012). Phase 1 is the safe engine everything else stands on.
 
 ## 2. What changed from the blueprint's Phase 1
 
