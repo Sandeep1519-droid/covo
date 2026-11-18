@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { covoPaths, tildify } from "@covo/core";
-import { checkModels, modelConfig } from "@covo/models";
+import { checkModels, ModelConfigError, modelConfig } from "@covo/models";
 import { checkClone, checkSandbox } from "@covo/sandbox";
 import type { CliResult, Ctx } from "../main.ts";
 
@@ -48,8 +48,13 @@ export async function doctorCommand(ctx: Ctx, args: string[]): Promise<CliResult
     );
   }
   if (which === "all" || which === "models") {
-    const cfg = modelConfig(ctx.env);
-    list(`Models (${cfg.model} via ${cfg.name})`, await checkModels(cfg));
+    try {
+      const cfg = modelConfig(ctx.env, { requireModel: false });
+      list(`Models (${cfg.model || "no model chosen"} via ${cfg.label})`, await checkModels(cfg));
+    } catch (e) {
+      if (!(e instanceof ModelConfigError)) throw e;
+      list("Models", [{ name: "Settings", status: "fail", detail: e.message }]);
+    }
   }
 
   const out = [

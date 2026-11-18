@@ -30,11 +30,15 @@ Options:
 
 Environment:
   COVO_HOME             Use another data folder instead of ~/Covo
-  COVO_MODEL            Model name (default qwen3.5:4b)
-  COVO_MODEL_BASE_URL   OpenAI-compatible endpoint (default Ollama, http://127.0.0.1:11434/v1)
-  COVO_MODEL_API_KEY    Key for hosted services such as OpenRouter or Gemini
+  COVO_PROVIDER         anthropic, openai, gemini, xai, deepseek, mistral, groq,
+                        openrouter, ollama (default) or lmstudio
+  COVO_MODEL            Model name (default: the provider's suggestion; qwen3.5:4b for Ollama)
+  COVO_MODEL_API_KEY    API key (or the provider's usual variable, e.g. ANTHROPIC_API_KEY)
+  COVO_MODEL_BASE_URL   Any other OpenAI-compatible service, or a proxy
   COVO_MODEL_CONTEXT    Ollama context window in tokens (default 8192)
-  COVO_MODEL_THINK      "on" lets thinking models think first (slower; default off)
+  COVO_MODEL_THINK      "on" lets local thinking models think first (slower; default off)
+
+  Example: COVO_PROVIDER=anthropic ANTHROPIC_API_KEY=… covo run "tidy the docs"
 `;
 
 export interface CliResult {

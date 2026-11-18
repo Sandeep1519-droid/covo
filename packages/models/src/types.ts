@@ -12,8 +12,25 @@ export interface ToolCall {
 export type ChatMessage =
   | { role: "system"; content: string }
   | { role: "user"; content: string }
-  | { role: "assistant"; content: string; toolCalls?: ToolCall[] }
+  | {
+      role: "assistant";
+      content: string;
+      toolCalls?: ToolCall[];
+      /**
+       * The provider's own reply, replayed unchanged on the next request by the same provider.
+       * Claude needs this: its thinking blocks must be sent back exactly as they came.
+       */
+      raw?: RawReply;
+    }
   | { role: "tool"; toolCallId: string; content: string };
+
+export interface RawReply {
+  provider: string;
+  content: unknown;
+}
+
+/** Why a request failed, so a bot can switch to its fallback model (Phase 2, M2). */
+export type ErrorKind = "auth" | "rate_limit" | "quota" | "unavailable" | "refused" | "bad_request" | "other";
 
 export interface ToolSpec {
   name: string;
@@ -43,7 +60,8 @@ export type ModelEvent =
       argsError?: string;
     }
   | { type: "usage"; tokensIn: number; tokensOut: number }
-  | { type: "done"; stop: StopReason; error?: string };
+  | { type: "raw"; raw: RawReply }
+  | { type: "done"; stop: StopReason; error?: string; errorKind?: ErrorKind };
 
 export interface ModelProvider {
   /** e.g. "ollama:qwen3:4b" */
@@ -59,6 +77,8 @@ export interface ChatResult {
   usage: { tokensIn: number; tokensOut: number };
   stop: StopReason;
   error?: string;
+  errorKind?: ErrorKind;
+  raw?: RawReply;
 }
 
 export async function collect(events: AsyncIterable<ModelEvent>): Promise<ChatResult> {
@@ -68,9 +88,11 @@ export async function collect(events: AsyncIterable<ModelEvent>): Promise<ChatRe
     else if (e.type === "reasoning") r.reasoning += e.delta;
     else if (e.type === "tool_call") r.toolCalls.push(e);
     else if (e.type === "usage") r.usage = { tokensIn: e.tokensIn, tokensOut: e.tokensOut };
+    else if (e.type === "raw") r.raw = e.raw;
     else {
       r.stop = e.stop;
       if (e.error) r.error = e.error;
+      if (e.errorKind) r.errorKind = e.errorKind;
     }
   }
   return r;

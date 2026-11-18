@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { modelConfig, providerFromConfig } from "./config.ts";
+import { AnthropicProvider } from "./anthropic.ts";
+import { ModelConfigError, missingKey, modelConfig, providerFromConfig } from "./config.ts";
 import { checkModels } from "./doctor.ts";
 import { MockProvider } from "./mock.ts";
 import { OllamaProvider, ollamaRoot, parseOllamaStream, toOllamaWire } from "./ollama.ts";
 import { OpenAICompatibleProvider, parseStream, toWire } from "./openai-compatible.ts";
+import { PRESETS, presetForUrl } from "./presets.ts";
 import { collect } from "./types.ts";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "..", "fixtures", name), "utf8");
@@ -170,12 +172,15 @@ describe("OpenAICompatibleProvider against a fake server", () => {
   });
 
   test("checkModels passes when the model exists and calls the tool", async () => {
-    const checks = await checkModels({ name: "test", baseUrl: base(), model: "qwen3:4b" });
+    const cfg = modelConfig({ COVO_MODEL_BASE_URL: base(), COVO_MODEL: "qwen3:4b" });
+    expect(cfg).toMatchObject({ name: "custom", kind: "openai-compatible", local: true });
+    const checks = await checkModels(cfg);
     expect(checks.map((c) => c.status)).toEqual(["pass", "pass", "pass"]);
   });
 
   test("checkModels says how to download a missing Ollama model", async () => {
-    const checks = await checkModels({ name: "ollama", baseUrl: base(), model: "llama9:70b" });
+    const cfg = { ...modelConfig({ COVO_MODEL_BASE_URL: base(), COVO_MODEL: "llama9:70b" }), kind: "ollama" as const };
+    const checks = await checkModels(cfg);
     expect(checks.at(-1)).toMatchObject({ status: "fail" });
     expect(checks.at(-1)?.detail).toContain("ollama pull llama9:70b");
   });
@@ -194,9 +199,11 @@ test("MockProvider plays its script and records requests", async () => {
 test("modelConfig defaults to local Ollama and reads overrides", () => {
   expect(modelConfig({})).toEqual({
     name: "ollama",
-    baseUrl: "http://127.0.0.1:11434/v1",
+    label: "Ollama (free, on this Mac)",
+    kind: "ollama",
+    baseUrl: "http://127.0.0.1:11434",
     model: "qwen3.5:4b",
-    apiKey: undefined,
+    local: true,
     numCtx: 8192,
     think: false,
   });
@@ -212,11 +219,58 @@ test("modelConfig defaults to local Ollama and reads overrides", () => {
       COVO_MODEL: "x/y:free",
       COVO_MODEL_API_KEY: "k",
     }),
-  ).toEqual({
-    name: "openrouter",
-    baseUrl: "https://openrouter.ai/api/v1",
-    model: "x/y:free",
-    apiKey: "k",
+  ).toMatchObject({ name: "openrouter", kind: "openai-compatible", model: "x/y:free", apiKey: "k", local: false });
+});
+
+describe("provider presets", () => {
+  test("pick a provider by name; keys come from its usual variable", () => {
+    const c = modelConfig({ COVO_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "sk-ant-test" });
+    expect(c).toMatchObject({
+      kind: "anthropic",
+      model: "claude-opus-5-5",
+      apiKey: "sk-ant-test",
+      keySource: "ANTHROPIC_API_KEY",
+    });
+    expect(providerFromConfig(c) instanceof AnthropicProvider).toBe(true);
+    expect(modelConfig({ COVO_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "a", COVO_MODEL_API_KEY: "b" }).apiKey).toBe(
+      "b",
+    );
+    expect(modelConfig({ COVO_PROVIDER: "gemini", COVO_MODEL: "g", GOOGLE_API_KEY: "k" }).keySource).toBe(
+      "GOOGLE_API_KEY",
+    );
+  });
+
+  test("explains what's missing instead of failing later", () => {
+    expect(() => modelConfig({ COVO_PROVIDER: "nope" })).toThrow(ModelConfigError);
+    expect(() => modelConfig({ COVO_PROVIDER: "openai" })).toThrow("COVO_MODEL=");
+    const noKey = modelConfig({ COVO_PROVIDER: "anthropic" });
+    expect(missingKey(noKey)).toContain("ANTHROPIC_API_KEY");
+    expect(() => providerFromConfig(noKey)).toThrow(ModelConfigError);
+    expect(missingKey(modelConfig({}))).toBeUndefined();
+  });
+
+  test("every preset is well formed and recognised from its address", () => {
+    const ids = new Set<string>();
+    for (const p of PRESETS) {
+      expect(ids.has(p.id)).toBe(false);
+      ids.add(p.id);
+      expect(() => new URL(p.baseUrl)).not.toThrow();
+      expect(presetForUrl(p.baseUrl)?.id).toBe(p.id);
+      expect(p.local === true || p.keyEnv.length > 0).toBe(true);
+    }
+    expect(presetForUrl("http://localhost:11434/v1")?.id).toBe("ollama");
+  });
+
+  test("checkModels lists the models when none is chosen", async () => {
+    const cfg = modelConfig({ COVO_PROVIDER: "openai", OPENAI_API_KEY: "k" }, { requireModel: false });
+    const checks = await checkModels(cfg, { listModels: async () => ["model-a", "model-b"] });
+    expect(checks.at(-1)).toMatchObject({ name: "Model chosen", status: "fail" });
+    expect(checks.at(-1)?.detail).toContain("model-a, model-b");
+  });
+
+  test("checkModels reports a missing key before calling anything", async () => {
+    const checks = await checkModels(modelConfig({ COVO_PROVIDER: "anthropic" }));
+    expect(checks).toEqual([{ name: "API key", status: "fail", detail: expect.stringContaining("ANTHROPIC_API_KEY") }]);
   });
 });
 

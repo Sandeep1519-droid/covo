@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { covoPaths, tildify } from "@covo/core";
 import { auditForRun, openDb } from "@covo/db";
 import { RunError, type RunEvent, startRun } from "@covo/engine";
-import { modelConfig, providerFromConfig } from "@covo/models";
+import { type ModelConfig, ModelConfigError, type ModelProvider, modelConfig, providerFromConfig } from "@covo/models";
 import type { CliResult, Ctx } from "../main.ts";
 
 const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
@@ -53,8 +53,15 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   const goal = words.join(" ").trim();
   if (!goal) return { code: 2, out: 'Usage: covo run "<task>" [--model <name>]\n' };
 
-  const cfg = modelConfig(model ? { ...ctx.env, COVO_MODEL: model } : ctx.env);
-  const provider = ctx.provider ?? providerFromConfig(cfg);
+  let cfg: ModelConfig;
+  let provider: ModelProvider;
+  try {
+    cfg = modelConfig(model ? { ...ctx.env, COVO_MODEL: model } : ctx.env);
+    provider = ctx.provider ?? providerFromConfig(cfg);
+  } catch (e) {
+    if (e instanceof ModelConfigError) return { code: 1, out: `${e.message}\n` };
+    throw e;
+  }
   const print = ctx.print;
   const controller = new AbortController();
   const onInt = () => {
@@ -67,7 +74,9 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
     if (e.type === "state") {
       if (e.state === "PREPARING") print(`Run ${e.runId}\nMaking a safe copy of the workspace…\n`);
       if (e.state === "RUNNING")
-        print(`Working with ${cfg.model} via ${cfg.name}. Each model step can take 10–30 s on this Mac.\n\n`);
+        print(
+          `Working with ${cfg.model} via ${cfg.label}.${cfg.local ? " Each model step can take 10–30 s on this Mac." : ""}\n\n`,
+        );
     } else if (e.type === "tool") {
       const mark = e.blocked ? "⛔" : e.ok ? " " : "✗";
       print(

@@ -118,7 +118,10 @@ export async function runLoop(input: LoopInput): Promise<LoopResult> {
     }
 
     const calls = toolCalls.map((t) => t.call);
-    messages.push({ role: "assistant", content: r.text, ...(calls.length ? { toolCalls: calls } : {}) });
+    // Keep the provider's own reply for replay, unless the calls were recovered from text (then
+    // the raw reply has no matching tool calls and would confuse the provider).
+    const raw = r.raw && toolCalls === r.toolCalls ? { raw: r.raw } : {};
+    messages.push({ role: "assistant", content: r.text, ...(calls.length ? { toolCalls: calls } : {}), ...raw });
 
     if (calls.length === 0) {
       if (nudges < limits.maxNudges) {

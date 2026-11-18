@@ -40,7 +40,7 @@ packages/models    model providers: Ollama or any OpenAI-compatible service, plu
 packages/engine    the bot: workspace tools, tool loop with guards, and the run lifecycle
 ```
 
-A bot always works on an instant copy of your workspace. Nothing in your real files changes until you review the run with `covo diff` and choose `covo keep` (all files, or just some) or `covo discard`. If you edited a file yourself while the bot worked, `covo keep` refuses that file instead of overwriting your edit. Models default to local Ollama (`qwen3.5:4b`, thinking off, 8K context); see `covo --help` for the `COVO_MODEL*` settings.
+A bot always works on an instant copy of your workspace. Nothing in your real files changes until you review the run with `covo diff` and choose `covo keep` (all files, or just some) or `covo discard`. If you edited a file yourself while the bot worked, `covo keep` refuses that file instead of overwriting your edit. Bots can use any AI you have: Claude (Anthropic's own API), GPT, Gemini, Grok, DeepSeek, Mistral, Groq, OpenRouter, or a free local model through Ollama or LM Studio. Pick one with `COVO_PROVIDER` and your key (see `covo --help`); with nothing set, Covo uses local Ollama (`qwen3.5:4b`). A guided `covo models add` with keys in the Keychain arrives in Phase 2 M1.
 
 Try it with a throwaway data folder:
 

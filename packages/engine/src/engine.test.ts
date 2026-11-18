@@ -216,6 +216,81 @@ describe("runLoop", () => {
   });
 });
 
+describe("runLoop with Claude", () => {
+  test("replays Claude's thinking unchanged and returns tool results together", async () => {
+    const bodies: { messages: { role: string; content: unknown }[] }[] = [];
+    const ev = (e: { type: string }) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`;
+    const turn = (blocks: unknown[], stop: string) =>
+      [
+        {
+          type: "message_start",
+          message: {
+            id: "m",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-5-5",
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 10, output_tokens: 1 },
+          },
+        },
+        ...blocks.flatMap((b, i) => [
+          { type: "content_block_start", index: i, content_block: b },
+          { type: "content_block_stop", index: i },
+        ]),
+        { type: "message_delta", delta: { stop_reason: stop, stop_sequence: null }, usage: { output_tokens: 5 } },
+        { type: "message_stop" },
+      ]
+        .map(ev)
+        .join("");
+    const script = [
+      turn(
+        [
+          { type: "thinking", thinking: "", signature: "sig-1" },
+          { type: "tool_use", id: "t1", name: "read_file", input: { path: "README.md" } },
+        ],
+        "tool_use",
+      ),
+      turn([{ type: "tool_use", id: "t2", name: "finish", input: { summary: "Read it" } }], "tool_use"),
+    ];
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        bodies.push((await req.json()) as (typeof bodies)[number]);
+        return new Response(script.shift(), { headers: { "content-type": "text/event-stream" } });
+      },
+    });
+    try {
+      const { AnthropicProvider } = await import("@covo/models");
+      const r = await runLoop({
+        provider: new AnthropicProvider({
+          apiKey: "k",
+          model: "claude-opus-5-5",
+          baseUrl: `http://127.0.0.1:${server.port}`,
+          maxRetries: 0,
+        }),
+        messages: [
+          { role: "system", content: "sys" },
+          { role: "user", content: "go" },
+        ],
+        tools: TOOL_SPECS,
+        exec: (name, args) => runTool(name, args, ctx()),
+      });
+      expect(r.outcome).toEqual({ kind: "finished", summary: "Read it", via: "finish" });
+      const second = bodies[1]?.messages ?? [];
+      expect(second.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+      expect(second[1]?.content).toEqual([
+        { type: "thinking", thinking: "", signature: "sig-1" },
+        { type: "tool_use", id: "t1", name: "read_file", input: { path: "README.md" } },
+      ]);
+      expect(second[2]?.content).toEqual([{ type: "tool_result", tool_use_id: "t1", content: "# Demo\n" }]);
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
 describe("startRun", () => {
   let home: string;
   beforeEach(() => {
