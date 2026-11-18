@@ -1,3 +1,5 @@
+export type { Bot, BotChanges, Level, NewBot } from "./bots.ts";
+export { archiveBot, createBot, findBot, LEVELS, listBots, updateBot } from "./bots.ts";
 export type { LoopHooks, LoopInput, LoopLimits, LoopOutcome, LoopResult, ModelTurn, ToolStep } from "./loop.ts";
 export { DEFAULT_LIMITS, NUDGE, runLoop } from "./loop.ts";
 export { systemPrompt, taskMessage } from "./prompt.ts";

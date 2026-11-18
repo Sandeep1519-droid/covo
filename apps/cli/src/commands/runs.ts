@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { covoPaths, tildify } from "@covo/core";
 import { auditForRun, openDb } from "@covo/db";
-import { RunError, type RunEvent, startRun } from "@covo/engine";
+import { type Bot, findBot, RunError, type RunEvent, startRun } from "@covo/engine";
 import { type ModelConfig, ModelConfigError, type ModelProvider, providerFromConfig, resolveModel } from "@covo/models";
 import { SecretError, secrets } from "@covo/platform";
 import type { CliResult, Ctx } from "../main.ts";
@@ -47,22 +47,45 @@ export function findRun(db: Database, arg: string | undefined): string | { error
 export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   const words: string[] = [];
   let model: string | undefined;
+  let botName: string | undefined;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--model") model = args[++i];
+    else if (args[i] === "--bot") botName = args[++i];
     else words.push(args[i] as string);
   }
   const goal = words.join(" ").trim();
-  if (!goal) return { code: 2, out: 'Usage: covo run "<task>" [--model <name>]\n' };
+  if (!goal) return { code: 2, out: 'Usage: covo run "<task>" [--bot <name>] [--model <saved model or name>]\n' };
 
-  let cfg: ModelConfig;
-  let provider: ModelProvider;
+  // Which models: --model, else the bot's own list, else the default.
+  let bot: Bot | undefined;
+  const entries: { label: string; cfg: ModelConfig; provider: ModelProvider }[] = [];
+  const skipped: string[] = [];
   try {
-    cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), ctx.env, model);
-    provider = ctx.provider ?? providerFromConfig(cfg);
+    if (botName) bot = findBot(ctx.home, botName, ctx.now);
+    const names: (string | undefined)[] = model ? [model] : bot?.models.length ? bot.models : [undefined];
+    for (const n of names) {
+      try {
+        const cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), ctx.env, n);
+        const provider = ctx.provider ?? providerFromConfig(cfg);
+        entries.push({ label: n ?? cfg.connection ?? cfg.model, cfg, provider });
+      } catch (e) {
+        if (names.length > 1 && (e instanceof ModelConfigError || e instanceof SecretError)) {
+          skipped.push(`${n}: ${e.message}`);
+        } else throw e;
+      }
+      if (ctx.provider) break; // tests inject one model
+    }
   } catch (e) {
-    if (e instanceof ModelConfigError || e instanceof SecretError) return { code: 1, out: `${e.message}\n` };
+    if (e instanceof ModelConfigError || e instanceof SecretError || e instanceof RunError) {
+      return { code: 1, out: `${e.message}\n` };
+    }
     throw e;
   }
+  if (!entries.length)
+    return { code: 1, out: `None of ${bot?.name ?? "the bot"}'s models can be used:\n  ${skipped.join("\n  ")}\n` };
+  const first = entries[0] as (typeof entries)[number];
+  const cfg = first.cfg;
+  const chain = entries.length > 1 ? entries.map((e) => ({ label: e.label, provider: e.provider })) : undefined;
   const print = ctx.print;
   const controller = new AbortController();
   const onInt = () => {
@@ -76,13 +99,22 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       if (e.state === "PREPARING") print(`Run ${e.runId}\nMaking a safe copy of the workspace…\n`);
       if (e.state === "RUNNING")
         print(
-          `Working with ${cfg.model} via ${cfg.label}.${cfg.local ? " Each model step can take 10–30 s on this Mac." : ""}\n\n`,
+          `${bot ? `${bot.name} is working` : "Working"} with ${cfg.model} via ${cfg.label}${
+            chain
+              ? ` (then ${chain
+                  .slice(1)
+                  .map((c) => c.label)
+                  .join(", then ")} if it fails)`
+              : ""
+          }.${cfg.local ? " Each model step can take 10–30 s on this Mac." : ""}\n\n`,
         );
     } else if (e.type === "tool") {
       const mark = e.blocked ? "⛔" : e.ok ? " " : "✗";
       print(
         `  ${String(e.seq).padStart(2)} ${mark} ${pad(e.name, 12)} ${pad(e.target || "", 40)} ${e.blocked ? `blocked (${e.blocked === "path" ? "outside the workspace" : "by the sandbox"})` : e.label}\n`,
       );
+    } else if (e.type === "fallback") {
+      print(`     (${e.from} failed: ${e.kind.replace("_", " ")}. Switching to ${e.to}.)\n`);
     } else if (e.type === "recovered") {
       print(`     (the bot typed its tool call as text; Covo understood it)\n`);
     } else if (e.type === "model" && e.toolCalls === 0 && e.text.trim()) {
@@ -91,7 +123,16 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   };
 
   try {
-    const r = await startRun({ home: ctx.home, goal, provider, signal: controller.signal, onEvent, now: ctx.now });
+    for (const w of skipped) print(`Skipping ${w}\n`);
+    const r = await startRun({
+      home: ctx.home,
+      goal,
+      ...(bot ? { agentId: bot.id } : {}),
+      ...(chain ? { chain } : { provider: first.provider }),
+      signal: controller.signal,
+      onEvent,
+      now: ctx.now,
+    });
     const lines = [""];
     const time = `${r.secs.toFixed(0)} s, ${r.steps} step${r.steps === 1 ? "" : "s"}, ${r.tokensIn + r.tokensOut} tokens`;
     if (r.state === "REVIEWING" && r.diff) {

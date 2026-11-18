@@ -1,4 +1,12 @@
-import type { ChatMessage, ChatRequest, ModelEvent, ModelProvider, StopReason, ToolCall } from "./types.ts";
+import {
+  type ChatMessage,
+  type ChatRequest,
+  kindForStatus,
+  type ModelEvent,
+  type ModelProvider,
+  type StopReason,
+  type ToolCall,
+} from "./types.ts";
 
 // Ollama's own chat API (/api/chat). Used instead of its OpenAI-compatible endpoint because only the
 // native API lets us set the context window and turn thinking off:
@@ -181,6 +189,7 @@ export class OllamaProvider implements ModelProvider {
         type: "done",
         stop: "error",
         error: `Can't reach ${this.o.baseUrl}. Is Ollama running? Start it with: ollama serve (${(e as Error).message})`,
+        errorKind: "unavailable",
       };
       return;
     }
@@ -195,7 +204,12 @@ export class OllamaProvider implements ModelProvider {
         yield* new OllamaProvider({ ...this.o, think: true }).chat(req, signal);
         return;
       }
-      yield { type: "done", stop: "error", error: `ollama answered ${res.status}: ${msg || res.statusText}` };
+      yield {
+        type: "done",
+        stop: "error",
+        error: `ollama answered ${res.status}: ${msg || res.statusText}`,
+        errorKind: kindForStatus(res.status, msg),
+      };
       return;
     }
     yield* parseOllamaStream(decode(res.body));

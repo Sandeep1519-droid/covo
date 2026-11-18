@@ -30,7 +30,36 @@ export interface RawReply {
 }
 
 /** Why a request failed, so a bot can switch to its fallback model (Phase 2, M2). */
-export type ErrorKind = "auth" | "rate_limit" | "quota" | "unavailable" | "refused" | "bad_request" | "other";
+export type ErrorKind =
+  | "auth"
+  | "rate_limit"
+  | "quota"
+  | "unavailable"
+  | "not_found"
+  | "refused"
+  | "bad_request"
+  | "other";
+
+/** Error kinds where another model may well succeed, so a bot moves to its next model. */
+export const FALLBACK_KINDS: ReadonlySet<ErrorKind> = new Set([
+  "auth",
+  "rate_limit",
+  "quota",
+  "unavailable",
+  "not_found",
+  "refused",
+]);
+
+/** Maps an HTTP status from a model service to an error kind. */
+export function kindForStatus(status: number, body = ""): ErrorKind {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 402) return "quota";
+  if (status === 404) return "not_found";
+  if (status === 429) return /quota|billing|credit|exceeded your current/i.test(body) ? "quota" : "rate_limit";
+  if (status >= 500) return "unavailable";
+  if (/credit|billing|balance|quota/i.test(body)) return "quota";
+  return "bad_request";
+}
 
 export interface ToolSpec {
   name: string;

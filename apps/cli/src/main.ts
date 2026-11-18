@@ -2,6 +2,7 @@ import { covoHome, VERSION } from "@covo/core";
 import type { Detected, ModelConfig, ModelProvider } from "@covo/models";
 import type { SecretStore } from "@covo/platform";
 import { auditCommand } from "./commands/audit.ts";
+import { botsCommand } from "./commands/bots.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { initCommand } from "./commands/init.ts";
 import { modelsCommand } from "./commands/models.ts";
@@ -19,7 +20,8 @@ Commands (Phase 1):
   audit verify        Check the activity log for tampering
   doctor [check]      Check instant copies, the sandbox and the model
   models              Connect the AI you use (Claude, GPT, Gemini, local…); "covo models add"
-  run "<task>"        Give the main bot a task on a safe copy  [--model <saved model or name>]
+  bots                Your bots, each with its own models and level; "covo bots create"
+  run "<task>"        Give a bot a task on a safe copy  [--bot <name>] [--model <saved model>]
   status              Show recent runs
   log <run>           Show a run's steps ("last" for the latest)
   diff <run>          Show what a run changed  [--stat for a summary]
@@ -87,6 +89,7 @@ export async function main(
   if (cmd === "status") return statusCommand(ctx);
   if (cmd === "log") return logCommand(ctx, rest);
   if (cmd === "models") return modelsCommand(ctx, rest);
+  if (cmd === "bots") return botsCommand(ctx, rest);
   if (cmd === "diff") return diffCommand(ctx, rest);
   if (cmd === "keep") return keepCommand(ctx, rest);
   if (cmd === "discard") return discardCommand(ctx, rest);

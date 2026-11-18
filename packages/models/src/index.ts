@@ -25,6 +25,8 @@ export type { Detected } from "./detect.ts";
 export { detect } from "./detect.ts";
 export type { ModelCheck } from "./doctor.ts";
 export { checkModels, listModelsFor } from "./doctor.ts";
+export type { ChainEntry, FallbackSwitch } from "./fallback.ts";
+export { FallbackProvider } from "./fallback.ts";
 export { MockProvider } from "./mock.ts";
 export type { OllamaOptions } from "./ollama.ts";
 export { DEFAULT_CONTEXT, OllamaProvider, ollamaRoot, parseOllamaStream, toOllamaWire } from "./ollama.ts";
@@ -44,4 +46,4 @@ export type {
   ToolCall,
   ToolSpec,
 } from "./types.ts";
-export { collect } from "./types.ts";
+export { collect, FALLBACK_KINDS, kindForStatus } from "./types.ts";

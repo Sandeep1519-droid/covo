@@ -1,4 +1,12 @@
-import type { ChatMessage, ChatRequest, ModelEvent, ModelProvider, StopReason, ToolCall } from "./types.ts";
+import {
+  type ChatMessage,
+  type ChatRequest,
+  kindForStatus,
+  type ModelEvent,
+  type ModelProvider,
+  type StopReason,
+  type ToolCall,
+} from "./types.ts";
 
 // One provider for every service that speaks the OpenAI chat-completions format:
 // local Ollama (the free default), OpenRouter, Google Gemini's compatible endpoint, Groq,
@@ -188,6 +196,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         type: "done",
         stop: "error",
         error: `Can't reach ${this.o.baseUrl}. ${hint(this.o)}(${(e as Error).message})`,
+        errorKind: "unavailable",
       };
       return;
     }
@@ -197,6 +206,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         type: "done",
         stop: "error",
         error: `${this.o.name} answered ${res.status}: ${detail || res.statusText}`,
+        errorKind: kindForStatus(res.status, detail),
       };
       return;
     }

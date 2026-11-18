@@ -3,7 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, realpathSync } from
 import { join } from "node:path";
 import { canonicalJson, covoPaths, newId, sha256Hex } from "@covo/core";
 import { appendAudit, DEFAULT_AGENT_ID, migrate, openDb } from "@covo/db";
-import type { ChatMessage, ModelProvider } from "@covo/models";
+import { type ChainEntry, type ChatMessage, FallbackProvider, type ModelProvider } from "@covo/models";
 import { cloner, sandbox as defaultSandbox, type Sandbox, type WorkspaceCloner } from "@covo/platform";
 import { CowWorkspaces, type DiffSummary } from "@covo/sandbox";
 import { type LoopLimits, type ModelTurn, runLoop } from "./loop.ts";
@@ -25,6 +25,7 @@ export type RunEvent =
   | { type: "state"; runId: string; state: RunState }
   | ({ type: "model" } & ModelTurn)
   | { type: "recovered"; count: number }
+  | { type: "fallback"; from: string; to: string; kind: string; error: string }
   | {
       type: "tool";
       seq: number;
@@ -38,7 +39,10 @@ export type RunEvent =
 export interface StartRunOptions {
   home: string;
   goal: string;
-  provider: ModelProvider;
+  /** One model… */
+  provider?: ModelProvider;
+  /** …or the bot's models in order; the next takes over when one fails (Phase 2, M2). */
+  chain?: ChainEntry[];
   agentId?: string;
   trigger?: string;
   sandbox?: Sandbox;
@@ -102,11 +106,12 @@ export async function startRun(o: StartRunOptions): Promise<RunSummary> {
 
 async function execute(db: Database, runsDir: string, o: StartRunOptions, now: () => number): Promise<RunSummary> {
   const agent = db
-    .query<{ id: string; name: string; purpose: string; department_id: string }, [string]>(
-      "SELECT id, name, purpose, department_id FROM agents WHERE id = ?",
+    .query<{ id: string; name: string; purpose: string; department_id: string; status: string }, [string]>(
+      "SELECT id, name, purpose, department_id, status FROM agents WHERE id = ?",
     )
     .get(o.agentId ?? DEFAULT_AGENT_ID);
   if (!agent) throw new RunError(`No bot with id ${o.agentId ?? DEFAULT_AGENT_ID}.`);
+  if (agent.status !== "active") throw new RunError(`${agent.name} is ${agent.status}, so it can't take tasks.`);
   const dept = db
     .query<{ id: string; workspace_path: string; max_concurrency: number }, [string]>(
       "SELECT id, workspace_path, max_concurrency FROM departments WHERE id = ?",
@@ -122,8 +127,16 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
     throw new RunError("Another task is already running here. On an 8 GB Mac, Covo runs one task at a time.");
   }
 
+  if (!o.chain?.length && !o.provider) throw new RunError("No model to run with.");
   const runId = newId("run");
   const started = now();
+  const provider: ModelProvider = o.chain?.length
+    ? new FallbackProvider(o.chain, (sw) => {
+        db.query("UPDATE runs SET model = ? WHERE id = ?").run(provider.id, runId);
+        appendAudit(db, { actor: "system", action: "model.fallback", runId, target: sw.to, detail: { ...sw } }, now);
+        o.onEvent?.({ type: "fallback", ...sw });
+      })
+    : (o.provider as ModelProvider);
   const actor = `agent:${agent.id}`;
   const cow = new CowWorkspaces(runsDir, o.cloner ?? cloner());
   const runDir = cow.runDir(runId);
@@ -133,10 +146,16 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
   db.query(
     `INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, model, created_at)
      VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?)`,
-  ).run(runId, agent.id, dept.id, o.trigger ?? "cli", o.goal, o.provider.id, started);
+  ).run(runId, agent.id, dept.id, o.trigger ?? "cli", o.goal, provider.id, started);
   appendAudit(
     db,
-    { actor: "user", action: "run.created", runId, target: o.goal, detail: { agent: agent.id, model: o.provider.id } },
+    {
+      actor: "user",
+      action: "run.created",
+      runId,
+      target: o.goal,
+      detail: { agent: agent.id, model: provider.id, ...(o.chain ? { chain: o.chain.map((c) => c.label) } : {}) },
+    },
     now,
   );
 
@@ -186,10 +205,9 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
     ];
     for (const m of initial) transcript(m);
     const sb = o.sandbox ?? defaultSandbox();
-    const tier = o.provider.id.startsWith("ollama:") || o.provider.id.startsWith("mock:") ? "local" : "api";
 
     const result = await runLoop({
-      provider: o.provider,
+      provider,
       messages: initial,
       tools: TOOL_SPECS,
       limits: o.limits,
@@ -200,23 +218,16 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       hooks: {
         onRecovered: (count) => o.onEvent?.({ type: "recovered", count }),
         onModel: (t) => {
+          // Read at each step: a fallback may have switched models mid-run.
+          const pid = provider.id;
+          const tier = /^(ollama|lmstudio|mock):/.test(pid) ? "local" : "api";
           addStep("model", {
             args_json: canonicalJson({ tokensIn: t.tokensIn, tokensOut: t.tokensOut, secs: t.secs }),
             result_preview: t.text.slice(0, 2000) || null,
           });
           db.query(
             "INSERT INTO budget_ledger (ts, run_id, agent_id, department_id, tier, provider, model, tokens_in, tokens_out, usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
-          ).run(
-            now(),
-            runId,
-            agent.id,
-            dept.id,
-            tier,
-            o.provider.id.split(":")[0] ?? "unknown",
-            o.provider.id,
-            t.tokensIn,
-            t.tokensOut,
-          );
+          ).run(now(), runId, agent.id, dept.id, tier, pid.split(":")[0] ?? "unknown", pid, t.tokensIn, t.tokensOut);
           o.onEvent?.({ type: "model", ...t });
         },
         onTool: (s) => {
