@@ -5,6 +5,9 @@ import {
   checkModels,
   type Detected,
   detect,
+  ENGINES,
+  type EngineInfo,
+  engineById,
   listModelsFor,
   loadSettings,
   type ModelConfig,
@@ -21,6 +24,7 @@ import {
 import { secrets as defaultSecrets, SecretError } from "@covo/platform";
 import type { CliResult, Ctx } from "../main.ts";
 import { Cancelled } from "../prompt.ts";
+import { checkEngine, findProgram } from "./engines.ts";
 
 // covo models: connect the AI services you use. Keys go to the macOS Keychain.
 
@@ -28,6 +32,8 @@ const USAGE = `Usage:
   covo models                         Show saved models and what's on this Mac
   covo models add [provider]          Connect an AI service (asks questions)
       [--name <n>] [--model <m>] [--base-url <url>] [--key-stdin] [--default] [--no-test]
+  covo models add claude-code         Use your Claude subscription through Claude Code
+      [--name <n>] [--model default|sonnet|opus|haiku|fable] [--default] [--yes]
   covo models test [name]             Send one small test request
   covo models default <name>          Use this one when a bot doesn't say otherwise
   covo models remove <name>           Forget it and delete its key from the Keychain
@@ -81,9 +87,10 @@ async function listModels(ctx: Ctx): Promise<CliResult> {
     lines.push("Saved models");
     for (const c of s.connections) {
       const p = presetById(c.provider);
-      const key = c.keyId ? "key in Keychain" : p?.local ? "no key needed" : "";
+      const en = engineById(c.provider);
+      const key = c.keyId ? "key in Keychain" : en ? "your subscription" : p?.local ? "no key needed" : "";
       lines.push(
-        `  ${c.name === s.default ? "★" : " "} ${c.name.padEnd(12)} ${(p?.label ?? c.provider).padEnd(28)} ${c.model.padEnd(24)} ${key}`,
+        `  ${c.name === s.default ? "★" : " "} ${c.name.padEnd(12)} ${(p?.label ?? en?.label ?? c.provider).padEnd(28)} ${c.model.padEnd(24)} ${key}`,
       );
     }
     lines.push("", "★ = used when a bot doesn't say otherwise");
@@ -105,8 +112,14 @@ function describeDetected(d: Detected): string[] {
   }
   for (const k of d.envKeys)
     out.push(`A ${presetById(k.provider)?.label} key in ${k.variable}: covo models add ${k.provider}`);
-  for (const c of d.clis)
-    out.push(`The ${c.name} command-line tool (${c.path}); subscription use arrives in a later update`);
+  for (const c of d.clis) {
+    const en = ENGINES.find((e) => e.command === c.name);
+    out.push(
+      en
+        ? `${en.label} (${c.path}): use ${en.plan} with: covo models add ${en.id}`
+        : `The ${c.name} command-line tool (${c.path}): its terms don't allow other apps to use the subscription (see docs/SUBSCRIPTIONS.md); connect an API key instead`,
+    );
+  }
   return out;
 }
 
@@ -131,12 +144,22 @@ async function add(ctx: Ctx, args: string[]): Promise<CliResult> {
             : (p.note ?? "");
       print(`  ${String(i + 1).padStart(2)}. ${p.label.padEnd(46)} ${hint}\n`);
     });
+    ENGINES.forEach((en, i) => {
+      const hint = d.clis.some((c) => c.name === en.command) ? "installed" : "not installed";
+      print(`  ${String(PRESETS.length + i + 1).padStart(2)}. ${`${en.label}: ${en.plan}`.padEnd(46)} ${hint}\n`);
+    });
     const a = await ask.ask("\nNumber or name:", "1");
-    provider = /^\d+$/.test(a) ? PRESETS[Number(a) - 1]?.id : a.toLowerCase();
+    const all = [...PRESETS.map((p) => p.id), ...ENGINES.map((e) => e.id)];
+    provider = /^\d+$/.test(a) ? all[Number(a) - 1] : a.toLowerCase();
   }
+  const engine = provider ? engineById(provider) : undefined;
+  if (engine) return addEngine(ctx, engine, opts);
   const preset = provider ? presetById(provider) : undefined;
   if (!preset)
-    return { code: 1, out: `Unknown service "${provider}". Choose from: ${PRESETS.map((p) => p.id).join(", ")}\n` };
+    return {
+      code: 1,
+      out: `Unknown service "${provider}". Choose from: ${[...PRESETS, ...ENGINES].map((p) => p.id).join(", ")}\n`,
+    };
 
   // 2. Its key.
   let key: string | undefined;
@@ -239,10 +262,80 @@ async function add(ctx: Ctx, args: string[]): Promise<CliResult> {
 async function test(ctx: Ctx, name?: string): Promise<CliResult> {
   const cfg = await resolveModel(ctx.home, store(ctx), ctx.env, name);
   if (name && cfg.connection !== name) throw new ModelConfigError(`No saved model called "${name}".`);
+  if (cfg.engine) {
+    const c = await checkEngine(ctx, cfg.engine, cfg.model);
+    const lines = [
+      `Testing ${cfg.connection} (${cfg.label})`,
+      `  ${c.ok ? "✓" : "✗"} ${"Program".padEnd(24)} ${c.detail}`,
+      `  ${"·"} ${"Sign-in".padEnd(24)} checked by ${engineById(cfg.engine)?.label} on the first task (testing it would use your plan)`,
+    ];
+    return { code: c.ok ? 0 : 1, out: `${lines.join("\n")}\n` };
+  }
   const checks = await checkModels(cfg, { provider: ctx.provider, listModels: ctx.listModels });
   const mark = { pass: "✓", fail: "✗", warn: "!" } as const;
   const lines = [`Testing ${cfg.connection ?? cfg.name} (${cfg.model} via ${cfg.label})`];
   for (const c of checks) lines.push(`  ${mark[c.status]} ${c.name.padEnd(24)} ${c.detail}`);
   const failed = checks.some((c) => c.status === "fail");
   return { code: failed ? 1 : 0, out: `${lines.join("\n")}\n` };
+}
+
+/** Opt in to a subscription engine (docs/SUBSCRIPTIONS.md). Covo never sees the sign-in. */
+async function addEngine(ctx: Ctx, en: EngineInfo, opts: Record<string, string | true>): Promise<CliResult> {
+  const ask = ctx.prompt;
+  const print = ctx.print;
+  const settings = loadSettings(ctx.home);
+  const path = findProgram(ctx, en.command);
+  if (!path) {
+    return {
+      code: 1,
+      out: `${en.label} isn't installed (no "${en.command}" on your PATH). Install it from ${en.installUrl}, sign in by running "${en.command}", then try again. Nothing was saved.\n`,
+    };
+  }
+  print(
+    [
+      `${en.label} found at ${path}.`,
+      "",
+      `Covo will run your ${en.label} program to do tasks, using ${en.plan}.`,
+      `  • You sign in with ${en.label} itself (run: ${en.command}). Covo never sees, copies or stores your sign-in.`,
+      "  • Tasks count toward your plan's usage limits. When you hit one, the bot's next model takes over.",
+      `  • ${en.label} works on Covo's copy of your files, with file tools only (no shell, no web).`,
+      "  • Covo's spending limits don't apply: a subscription is a flat fee.",
+      "  Details and the terms we checked: docs/SUBSCRIPTIONS.md",
+      "",
+    ].join("\n"),
+  );
+  if (ask && opts.yes !== true && !/^y/i.test(await ask.ask(`Use ${en.label} with your subscription? (y/N)`, "n"))) {
+    return { code: 1, out: "Nothing was saved.\n" };
+  }
+
+  let model = opts.model as string | undefined;
+  if (!model && ask) {
+    model = await ask.ask(
+      `Which model? ${en.models.join(", ")} ("default" uses ${en.label}'s own setting):`,
+      "default",
+    );
+  }
+  model = (model ?? "default").trim() || "default";
+  if (!/^[a-z0-9][a-z0-9.\-[\]]*$/i.test(model))
+    return { code: 1, out: `"${model}" isn't a model name. Nothing was saved.\n` };
+
+  let name = (opts.name as string | undefined) ?? suggestName(settings, en.id);
+  if (ask && !opts.name) name = await ask.ask("Name for this model (letters, digits, dashes):", name);
+  if (!NAME_RE.test(name))
+    return { code: 1, out: `"${name}" can't be a name. Use lowercase letters, digits and dashes.\n` };
+  const makeDefault =
+    settings.connections.length === 0 ||
+    opts.default === true ||
+    (ask !== undefined && /^y/i.test(await ask.ask(`Use "${name}" by default for bots? (y/N)`, "n")));
+  const c = await addConnection(ctx.home, store(ctx), { name, provider: en.id, model, makeDefault });
+
+  const check = await checkEngine(ctx, en.id, model);
+  const lines = [
+    "",
+    `Saved "${c.name}": ${en.label}, ${model === "default" ? `${en.label}'s own model setting` : model}. No key is stored.`,
+    makeDefault ? "Bots use it by default." : `Use it in a bot: covo bots set <bot> --model ${c.name} --fallback local`,
+    `${check.ok ? "✓" : "✗"} ${check.detail}`,
+    "",
+  ];
+  return { code: check.ok ? 0 : 1, out: lines.join("\n") };
 }

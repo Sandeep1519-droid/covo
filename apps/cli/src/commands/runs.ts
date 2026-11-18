@@ -1,8 +1,20 @@
 import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { covoPaths, tildify } from "@covo/core";
 import { auditForRun, openDb } from "@covo/db";
-import { approvalStreak, type Bot, findBot, RunError, type RunEvent, startRun, updateBot, usd } from "@covo/engine";
+import {
+  approvalStreak,
+  type Bot,
+  type Engine,
+  findBot,
+  type RunChainEntry,
+  RunError,
+  type RunEvent,
+  startRun,
+  updateBot,
+  usd,
+} from "@covo/engine";
 import {
   getLimits,
   loadUserPrices,
@@ -14,6 +26,7 @@ import {
 } from "@covo/models";
 import { SecretError, secrets } from "@covo/platform";
 import type { CliResult, Ctx } from "../main.ts";
+import { makeEngine } from "./engines.ts";
 import { currentCapacity } from "./profile.ts";
 
 const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
@@ -76,7 +89,7 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
 
   // Which models: --model, else the bot's own list, else the default.
   let bot: Bot | undefined;
-  const entries: { label: string; cfg: ModelConfig; provider: ModelProvider }[] = [];
+  const entries: { label: string; cfg: ModelConfig; provider?: ModelProvider; engine?: Engine }[] = [];
   const skipped: string[] = [];
   try {
     if (botName) bot = findBot(ctx.home, botName, ctx.now);
@@ -84,8 +97,18 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
     for (const n of names) {
       try {
         const cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), env, n);
+        const label = n ?? cfg.connection ?? cfg.model;
+        if (cfg.engine) {
+          // A subscription engine (docs/SUBSCRIPTIONS.md): it runs first and does the whole task.
+          const engine = makeEngine(ctx, cfg.engine, cfg.model);
+          if ("missing" in engine) throw new ModelConfigError(engine.missing);
+          if (entries.some((e) => e.provider))
+            skipped.push(`${label}: a subscription engine must come first in a bot's model list`);
+          else entries.push({ label, cfg, engine });
+          continue;
+        }
         const provider = ctx.provider ?? providerFromConfig(cfg);
-        entries.push({ label: n ?? cfg.connection ?? cfg.model, cfg, provider });
+        entries.push({ label, cfg, provider });
       } catch (e) {
         if (names.length > 1 && (e instanceof ModelConfigError || e instanceof SecretError)) {
           skipped.push(`${n}: ${e.message}`);
@@ -103,7 +126,12 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
     return { code: 1, out: `None of ${bot?.name ?? "the bot"}'s models can be used:\n  ${skipped.join("\n  ")}\n` };
   const first = entries[0] as (typeof entries)[number];
   const cfg = first.cfg;
-  const chain = entries.length > 1 ? entries.map((e) => ({ label: e.label, provider: e.provider })) : undefined;
+  const chain: RunChainEntry[] | undefined =
+    entries.length > 1 || first.engine
+      ? entries.map((e) =>
+          e.engine ? { label: e.label, engine: e.engine } : { label: e.label, provider: e.provider as ModelProvider },
+        )
+      : undefined;
   const print = ctx.print;
   const controller = new AbortController();
   const onInt = () => {
@@ -118,9 +146,10 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       if (e.state === "PREPARING") print(`Run ${e.runId}\nMaking a safe copy of the workspace…\n`);
       if (e.state === "RUNNING" && !announced) {
         announced = true; // RUNNING comes again after a spending pause
+        const using = first.engine ? cfg.label : `${cfg.model} via ${cfg.label}`;
         print(
-          `${bot ? `${bot.name} is working` : "Working"} with ${cfg.model} via ${cfg.label}${
-            chain
+          `${bot ? `${bot.name} is working` : "Working"} with ${using}${
+            chain && chain.length > 1
               ? ` (then ${chain
                   .slice(1)
                   .map((c) => c.label)
@@ -138,6 +167,13 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       print(`\n  ⏸ ${e.summary}\n`);
       if (!ctx.prompt)
         print(`    Approve with: covo approve ${e.runId.slice(-6)}    Stop it with: covo deny ${e.runId.slice(-6)}\n`);
+    } else if (e.type === "engine") {
+      if (e.phase === "start") print(`  ${e.label} is working in Covo's sandbox (file tools only)…\n`);
+      else if (e.ok)
+        print(
+          `  ${e.label} finished: ${e.turns} turn${e.turns === 1 ? "" : "s"}, ${(e.tokensIn + e.tokensOut).toLocaleString("en-US")} tokens, ${e.secs.toFixed(0)} s (on your subscription)\n`,
+        );
+      else print(`  ${e.label} stopped: ${e.error}\n`);
     } else if (e.type === "fallback") {
       print(`     (${e.from} failed: ${e.kind.replace("_", " ")}. Switching to ${e.to}.)\n`);
     } else if (e.type === "recovered") {
@@ -154,7 +190,8 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       home: ctx.home,
       goal,
       ...(bot ? { agentId: bot.id } : {}),
-      ...(chain ? { chain } : { provider: first.provider }),
+      ...(chain ? { chain } : { provider: first.provider as ModelProvider }),
+      userHome: ctx.env.HOME ?? homedir(),
       signal: controller.signal,
       onEvent,
       now: ctx.now,

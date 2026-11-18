@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { dirname, join } from "node:path";
 import type { SecretStore } from "@covo/platform";
 import { type ModelConfig, ModelConfigError, modelConfig } from "./config.ts";
+import { engineById } from "./engines.ts";
 import { presetById } from "./presets.ts";
 
 // Saved model connections: "claude" = Anthropic + claude-opus-5-5 + a key in the Keychain.
@@ -12,7 +13,7 @@ import { presetById } from "./presets.ts";
 export interface Connection {
   /** Short name you use: "claude", "gemini", "local". */
   name: string;
-  /** Preset id (anthropic, gemini, ollama, …) or "custom". */
+  /** Preset id (anthropic, gemini, ollama, …), an engine id (claude-code), or "custom". */
   provider: string;
   model: string;
   /** For custom services or proxies. */
@@ -75,7 +76,8 @@ export function saveSettings(home: string, s: Settings): void {
 /** A free name based on the provider: "gemini", then "gemini-2", … */
 export function suggestName(s: Settings, provider: string): string {
   const base =
-    provider === "ollama" || provider === "lmstudio" ? "local" : provider === "anthropic" ? "claude" : provider;
+    engineById(provider)?.suggestedName ??
+    (provider === "ollama" || provider === "lmstudio" ? "local" : provider === "anthropic" ? "claude" : provider);
   if (!s.connections.some((c) => c.name === base)) return base;
   for (let i = 2; ; i++) if (!s.connections.some((c) => c.name === `${base}-${i}`)) return `${base}-${i}`;
 }
@@ -93,8 +95,9 @@ export async function addConnection(home: string, store: SecretStore, a: AddConn
   if (!NAME_RE.test(a.name)) {
     throw new ModelConfigError(`"${a.name}" can't be a name: use lowercase letters, digits and dashes (up to 32).`);
   }
-  if (a.provider !== "custom" && !presetById(a.provider))
+  if (a.provider !== "custom" && !presetById(a.provider) && !engineById(a.provider))
     throw new ModelConfigError(`Unknown provider "${a.provider}".`);
+  if (engineById(a.provider) && a.key) throw new ModelConfigError("An engine uses its own sign-in, not a key.");
   const s = loadSettings(home);
   if (s.connections.some((c) => c.name === a.name)) {
     throw new ModelConfigError(`There's already a model called "${a.name}". Remove it first or pick another name.`);
@@ -137,6 +140,8 @@ export function setDefault(home: string, name: string): void {
 export interface Resolved extends ModelConfig {
   /** The saved connection used, if any. */
   connection?: string;
+  /** Set for a subscription engine (claude-code): the program does the whole task itself. */
+  engine?: string;
 }
 
 /**
@@ -157,6 +162,24 @@ export async function resolveModel(
   const byName = use ? s.connections.find((c) => c.name === use) : undefined;
   const conn = byName ?? s.connections.find((c) => c.name === s.default);
   if (!conn) return modelConfig(use ? { ...env, COVO_MODEL: use } : env);
+  const engine = engineById(conn.provider);
+  // An unsaved name never means an engine: "local" is the free local model, anything else a model
+  // name for the local service.
+  if (use && !byName && (engine || use === "local")) {
+    return modelConfig(use === "local" ? env : { ...env, COVO_MODEL: use });
+  }
+  if (engine) {
+    return {
+      name: engine.id,
+      label: `${engine.label} (${engine.plan})`,
+      kind: "anthropic",
+      baseUrl: "",
+      model: conn.model || "default",
+      local: false,
+      connection: conn.name,
+      engine: engine.id,
+    };
+  }
   const cfg: Resolved = {
     ...modelConfig({
       COVO_PROVIDER: conn.provider === "custom" ? undefined : conn.provider,

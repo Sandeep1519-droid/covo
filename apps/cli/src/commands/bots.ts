@@ -22,7 +22,7 @@ const USAGE = `Usage:
   covo bots remove "<name>"                 Remove a bot (its past runs stay)
 
 Options:
-  --model <name>        Its main model: a saved model (see covo models) or a model name
+  --model <name>        Its main model: a saved model (see covo models) or a model name. A subscription engine (claude-code) must be the main model
   --fallback <name>     A model to switch to if the one before fails (repeat for more)
   --default-model       Use the default model again
   --purpose "<text>"    One line about what it's for

@@ -147,5 +147,7 @@ test("lists what it found on this Mac", async () => {
   expect(r.out).toContain("No saved models yet");
   expect(r.out).toContain("Ollama is running with 1 model: qwen3.5:4b");
   expect(r.out).toContain("A Google Gemini key in GEMINI_API_KEY: covo models add gemini");
-  expect(r.out).toContain("The claude command-line tool");
+  expect(r.out).toContain(
+    "Claude Code (/opt/bin/claude): use your Claude Pro, Max or Ultra subscription with: covo models add claude-code",
+  );
 });

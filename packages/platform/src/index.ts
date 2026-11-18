@@ -30,6 +30,19 @@ export interface SandboxOptions {
   env?: Record<string, string>;
   /** Folders the command may read but not change. */
   readOnly?: string[];
+  /** cli-agent profile only (subscription engines, docs/SUBSCRIPTIONS.md): */
+  /** extra folders it may change, */
+  readWrite?: string[];
+  /** files it may change (each with any suffix), */
+  readWriteFilePrefixes?: string[];
+  /** network access, */
+  network?: boolean;
+  /** and the Keychain services, so the engine can read its own sign-in. */
+  keychain?: boolean;
+  /** Sent to the command's standard input. */
+  stdin?: string;
+  /** Stops the command (SIGINT) when aborted. */
+  signal?: AbortSignal;
 }
 
 export interface Sandbox {

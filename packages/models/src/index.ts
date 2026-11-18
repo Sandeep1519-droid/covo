@@ -30,6 +30,8 @@ export type { Detected } from "./detect.ts";
 export { detect } from "./detect.ts";
 export type { ModelCheck } from "./doctor.ts";
 export { checkModels, listModelsFor } from "./doctor.ts";
+export type { EngineInfo } from "./engines.ts";
+export { ENGINES, engineById } from "./engines.ts";
 export type { ChainEntry, FallbackSwitch } from "./fallback.ts";
 export { FallbackProvider } from "./fallback.ts";
 export { MockProvider } from "./mock.ts";

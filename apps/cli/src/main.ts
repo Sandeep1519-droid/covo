@@ -1,4 +1,5 @@
 import { covoHome, VERSION } from "@covo/core";
+import type { Engine } from "@covo/engine";
 import type { Detected, ModelConfig, ModelProvider } from "@covo/models";
 import type { SecretStore, SystemInfo } from "@covo/platform";
 import { auditCommand } from "./commands/audit.ts";
@@ -79,6 +80,10 @@ export interface Ctx {
   readStdin?: () => Promise<string>;
   system?: () => SystemInfo;
   ollamaModels?: () => Promise<{ name: string; parameterSize?: string }[]>;
+  /** Finds a program on the PATH (subscription engines). */
+  which?: (cmd: string) => string | null;
+  /** Tests inject a scripted subscription engine here. */
+  engine?: Engine;
 }
 
 export async function main(
@@ -98,6 +103,8 @@ export async function main(
       | "readStdin"
       | "system"
       | "ollamaModels"
+      | "which"
+      | "engine"
     >
   > = {},
 ): Promise<CliResult> {

@@ -1,13 +1,22 @@
 import type { Database } from "bun:sqlite";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { canonicalJson, covoPaths, newId, sha256Hex } from "@covo/core";
 import { appendAudit, DEFAULT_AGENT_ID, migrate, openDb } from "@covo/db";
-import { type ChainEntry, type ChatMessage, FallbackProvider, type ModelProvider, type Price } from "@covo/models";
+import {
+  type ChainEntry,
+  type ChatMessage,
+  FALLBACK_KINDS,
+  FallbackProvider,
+  type ModelProvider,
+  type Price,
+} from "@covo/models";
 import { cloner, sandbox as defaultSandbox, type Sandbox, type WorkspaceCloner } from "@covo/platform";
 import { CowWorkspaces, type DiffSummary } from "@covo/sandbox";
 import { type AskApproval, Budget, type SpendLimits, type SpendRequest } from "./budget.ts";
-import { type LoopLimits, type ModelTurn, runLoop } from "./loop.ts";
+import { type Engine, engineInstructions } from "./engines.ts";
+import { DEFAULT_LIMITS, type LoopLimits, type LoopOutcome, type ModelTurn, runLoop } from "./loop.ts";
 import { systemPrompt, taskMessage } from "./prompt.ts";
 import { type KeepOutcome, keepChanges } from "./review.ts";
 import { type RunState, recordState } from "./state.ts";
@@ -29,6 +38,18 @@ export type RunEvent =
   | { type: "recovered"; count: number }
   | { type: "fallback"; from: string; to: string; kind: string; error: string }
   | ({ type: "approval" } & SpendRequest)
+  | { type: "engine"; phase: "start"; label: string }
+  | {
+      type: "engine";
+      phase: "end";
+      label: string;
+      ok: boolean;
+      turns: number;
+      tokensIn: number;
+      tokensOut: number;
+      secs: number;
+      error?: string;
+    }
   | {
       type: "tool";
       seq: number;
@@ -39,13 +60,31 @@ export type RunEvent =
       blocked?: "path" | "sandbox";
     };
 
+/** A subscription engine in a bot's list (Phase 2 M6): it runs the whole task itself. */
+export interface EngineEntry {
+  label: string;
+  engine: Engine;
+}
+
+export type RunChainEntry = ChainEntry | EngineEntry;
+export const isEngineEntry = (e: RunChainEntry): e is EngineEntry => "engine" in e;
+const engineModelId = (e: Engine) => `${e.id}:${e.model ?? "default"}`;
+
+/** Engine runs default to this much time (they do a whole task in one go). */
+export const ENGINE_TIMEOUT_MS = 20 * 60_000;
+
 export interface StartRunOptions {
   home: string;
   goal: string;
   /** One model… */
   provider?: ModelProvider;
-  /** …or the bot's models in order; the next takes over when one fails (Phase 2, M2). */
-  chain?: ChainEntry[];
+  /**
+   * …or the bot's models in order; the next takes over when one fails (Phase 2, M2). Subscription
+   * engines must come first: one listed after a regular model is skipped.
+   */
+  chain?: RunChainEntry[];
+  /** Your real home folder, where an engine finds its own sign-in. Default: this user's. */
+  userHome?: string;
   agentId?: string;
   trigger?: string;
   sandbox?: Sandbox;
@@ -159,13 +198,24 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
   if (!o.chain?.length && !o.provider) throw new RunError("No model to run with.");
   const runId = newId("run");
   const started = now();
-  const provider: ModelProvider = o.chain?.length
-    ? new FallbackProvider(o.chain, (sw) => {
-        db.query("UPDATE runs SET model = ? WHERE id = ?").run(provider.id, runId);
+  // Engines first (each does the whole task), then the regular models with automatic fallback.
+  const engines: EngineEntry[] = [];
+  const all = o.chain ?? [];
+  let k = 0;
+  while (k < all.length && isEngineEntry(all[k] as RunChainEntry)) engines.push(all[k++] as EngineEntry);
+  const models = all.slice(k).filter((e): e is ChainEntry => !isEngineEntry(e));
+  const skippedEngines = all.slice(k).filter(isEngineEntry);
+  const provider: ModelProvider | undefined = models.length
+    ? new FallbackProvider(models, (sw) => {
+        db.query("UPDATE runs SET model = ? WHERE id = ?").run((provider as ModelProvider).id, runId);
         appendAudit(db, { actor: "system", action: "model.fallback", runId, target: sw.to, detail: { ...sw } }, now);
         o.onEvent?.({ type: "fallback", ...sw });
       })
-    : (o.provider as ModelProvider);
+    : o.chain?.length
+      ? undefined
+      : o.provider;
+  const firstEngine = engines[0];
+  const firstModel = firstEngine ? engineModelId(firstEngine.engine) : (provider as ModelProvider).id;
   const actor = `agent:${agent.id}`;
   const cow = new CowWorkspaces(runsDir, o.cloner ?? cloner());
   const runDir = cow.runDir(runId);
@@ -175,7 +225,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
   db.query(
     `INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, model, created_at)
      VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?)`,
-  ).run(runId, agent.id, dept.id, o.trigger ?? "cli", o.goal, provider.id, started);
+  ).run(runId, agent.id, dept.id, o.trigger ?? "cli", o.goal, firstModel, started);
   appendAudit(
     db,
     {
@@ -183,7 +233,12 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       action: "run.created",
       runId,
       target: o.goal,
-      detail: { agent: agent.id, model: provider.id, ...(o.chain ? { chain: o.chain.map((c) => c.label) } : {}) },
+      detail: {
+        agent: agent.id,
+        model: firstModel,
+        ...(o.chain ? { chain: o.chain.map((c) => c.label) } : {}),
+        ...(skippedEngines.length ? { skipped: skippedEngines.map((e) => e.label) } : {}),
+      },
     },
     now,
   );
@@ -229,12 +284,104 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
     const ws = realpathSync(snap.wsPath);
 
     setState("RUNNING");
+    const sb = o.sandbox ?? defaultSandbox();
+    const limits = { ...DEFAULT_LIMITS, ...o.limits };
+
+    // 1. Subscription engines, in order (docs/SUBSCRIPTIONS.md). Their usage is logged at $0: a
+    //    subscription is a flat fee, so spending limits don't apply to it.
+    let engineOutcome: LoopOutcome | undefined;
+    let handoff: string | undefined;
+    for (let e = 0; e < engines.length; e++) {
+      const en = engines[e] as EngineEntry;
+      const t0 = now();
+      o.onEvent?.({ type: "engine", phase: "start", label: en.engine.label });
+      const r = await en.engine.run({
+        ws,
+        tmp,
+        goal: o.goal,
+        instructions: engineInstructions(agent.name, agent.purpose),
+        sandbox: sb,
+        home: o.userHome ?? homedir(),
+        signal: o.signal,
+        timeoutMs: o.limits?.maxMs ?? ENGINE_TIMEOUT_MS,
+        maxTurns: limits.maxSteps,
+      });
+      const secs = (now() - t0) / 1000;
+      const mid = r.model ? `${en.engine.id}:${r.model}` : engineModelId(en.engine);
+      tokensIn += r.tokensIn;
+      tokensOut += r.tokensOut;
+      steps += r.turns;
+      addStep("model", {
+        args_json: canonicalJson({
+          engine: en.engine.id,
+          turns: r.turns,
+          tokensIn: r.tokensIn,
+          tokensOut: r.tokensOut,
+          secs,
+        }),
+        result_preview: (r.summary ?? r.error ?? "").slice(0, 2000) || null,
+      });
+      db.query(
+        "INSERT INTO budget_ledger (ts, run_id, agent_id, department_id, tier, provider, model, tokens_in, tokens_out, usd, estimated) VALUES (?, ?, ?, ?, 'cli', ?, ?, ?, ?, 0, 0)",
+      ).run(now(), runId, agent.id, dept.id, en.engine.id, mid, r.tokensIn, r.tokensOut);
+      appendAudit(
+        db,
+        {
+          actor,
+          action: "engine.run",
+          runId,
+          target: en.label,
+          decision: r.ok ? "allow" : null,
+          detail: {
+            engine: en.engine.id,
+            model: mid,
+            ok: r.ok,
+            turns: r.turns,
+            tokensIn: r.tokensIn,
+            tokensOut: r.tokensOut,
+            secs,
+            apiEquivalentUsd: r.apiEquivalentUsd,
+            denied: r.denied,
+            ...(r.error ? { error: r.error } : {}),
+          },
+        },
+        now,
+      );
+      o.onEvent?.({
+        type: "engine",
+        phase: "end",
+        label: en.engine.label,
+        ok: r.ok,
+        turns: r.turns,
+        tokensIn: r.tokensIn,
+        tokensOut: r.tokensOut,
+        secs,
+        ...(r.error ? { error: r.error } : {}),
+      });
+      if (r.ok) {
+        engineOutcome = { kind: "finished", summary: r.summary ?? "Done.", via: "finish" };
+        break;
+      }
+      const next = engines[e + 1] ?? models[0];
+      if (r.errorKind && FALLBACK_KINDS.has(r.errorKind) && next && !o.signal?.aborted) {
+        const sw = { from: en.label, to: next.label, kind: r.errorKind, error: r.error ?? "" };
+        const nextId = isEngineEntry(next) ? engineModelId(next.engine) : next.provider.id;
+        db.query("UPDATE runs SET model = ? WHERE id = ?").run(nextId, runId);
+        appendAudit(db, { actor: "system", action: "model.fallback", runId, target: sw.to, detail: { ...sw } }, now);
+        o.onEvent?.({ type: "fallback", ...sw });
+        handoff = `${en.engine.label} started this task and stopped partway (${r.error}). Some of its changes may already be in these files: check them first, and don't redo work that's done.`;
+        continue;
+      }
+      engineOutcome = r.stopped
+        ? { kind: "stopped", reason: r.error ?? "stopped" }
+        : { kind: "failed", error: `${en.engine.label}: ${r.error ?? "failed"}` };
+      break;
+    }
+
     const initial: ChatMessage[] = [
       { role: "system", content: systemPrompt(agent.name, agent.purpose) },
-      { role: "user", content: taskMessage(o.goal, listing(ws)) },
+      { role: "user", content: `${taskMessage(o.goal, listing(ws))}${handoff ? `\n\nNote: ${handoff}` : ""}` },
     ];
-    for (const m of initial) transcript(m);
-    const sb = o.sandbox ?? defaultSandbox();
     const budget = new Budget({
       db,
       runId,
@@ -255,93 +402,100 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
     });
     budgetRef = budget;
 
-    const result = await runLoop({
-      provider,
-      messages: initial,
-      tools: TOOL_SPECS,
-      limits: o.limits,
-      signal: o.signal,
-      now,
-      exec: (name, args) =>
-        runTool(name, args, { ws, tmp, sandbox: sb, commandTimeoutMs: o.commandTimeoutMs ?? 60_000 }),
-      hooks: {
-        beforeModel: (messages) => budget.check(provider.id, messages),
-        onRecovered: (count) => o.onEvent?.({ type: "recovered", count }),
-        onModel: (t) => {
-          // Read at each step: a fallback may have switched models mid-run.
-          const pid = provider.id;
-          const tier = /^(ollama|lmstudio|mock):/.test(pid) ? "local" : "api";
-          addStep("model", {
-            args_json: canonicalJson({ tokensIn: t.tokensIn, tokensOut: t.tokensOut, secs: t.secs }),
-            result_preview: t.text.slice(0, 2000) || null,
-          });
-          const cost = budget.record(pid, t.tokensIn, t.tokensOut);
-          db.query(
-            "INSERT INTO budget_ledger (ts, run_id, agent_id, department_id, tier, provider, model, tokens_in, tokens_out, usd, estimated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          ).run(
-            now(),
-            runId,
-            agent.id,
-            dept.id,
-            tier,
-            pid.split(":")[0] ?? "unknown",
-            pid,
-            t.tokensIn,
-            t.tokensOut,
-            cost.usd,
-            cost.estimated ? 1 : 0,
-          );
-          db.query("UPDATE runs SET cost_usd = ? WHERE id = ?").run(budget.runSpent, runId);
-          o.onEvent?.({ type: "model", ...t });
-        },
-        onTool: (s) => {
-          steps++;
-          const target = targetOf(s.args);
-          const decision = s.result.blocked ? "deny" : "allow";
-          const n = addStep("tool", {
-            tool_name: s.call.name,
-            args_json: s.args ? canonicalJson(s.args) : s.call.arguments,
-            result_digest: sha256Hex(s.result.output),
-            result_preview: s.result.output.slice(0, 2000),
-            fingerprint: s.fingerprint,
-            mutating: s.result.mutating ? 1 : 0,
-            decision,
-          });
-          appendAudit(
-            db,
-            {
-              actor,
-              action: `tool.${s.call.name}`,
+    // 2. Covo's own loop with the regular models, unless an engine settled it.
+    let out: LoopOutcome;
+    if (engineOutcome) out = engineOutcome;
+    else {
+      if (!provider) throw new RunError("No model to run with.");
+      for (const m of initial) transcript(m);
+      const result = await runLoop({
+        provider,
+        messages: initial,
+        tools: TOOL_SPECS,
+        limits: o.limits,
+        signal: o.signal,
+        now,
+        exec: (name, args) =>
+          runTool(name, args, { ws, tmp, sandbox: sb, commandTimeoutMs: o.commandTimeoutMs ?? 60_000 }),
+        hooks: {
+          beforeModel: (messages) => budget.check(provider.id, messages),
+          onRecovered: (count) => o.onEvent?.({ type: "recovered", count }),
+          onModel: (t) => {
+            // Read at each step: a fallback may have switched models mid-run.
+            const pid = provider.id;
+            const tier = /^(ollama|lmstudio|mock):/.test(pid) ? "local" : "api";
+            addStep("model", {
+              args_json: canonicalJson({ tokensIn: t.tokensIn, tokensOut: t.tokensOut, secs: t.secs }),
+              result_preview: t.text.slice(0, 2000) || null,
+            });
+            const cost = budget.record(pid, t.tokensIn, t.tokensOut);
+            db.query(
+              "INSERT INTO budget_ledger (ts, run_id, agent_id, department_id, tier, provider, model, tokens_in, tokens_out, usd, estimated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ).run(
+              now(),
               runId,
-              target,
+              agent.id,
+              dept.id,
+              tier,
+              pid.split(":")[0] ?? "unknown",
+              pid,
+              t.tokensIn,
+              t.tokensOut,
+              cost.usd,
+              cost.estimated ? 1 : 0,
+            );
+            db.query("UPDATE runs SET cost_usd = ? WHERE id = ?").run(budget.runSpent, runId);
+            o.onEvent?.({ type: "model", ...t });
+          },
+          onTool: (s) => {
+            steps++;
+            const target = targetOf(s.args);
+            const decision = s.result.blocked ? "deny" : "allow";
+            const n = addStep("tool", {
+              tool_name: s.call.name,
+              args_json: s.args ? canonicalJson(s.args) : s.call.arguments,
+              result_digest: sha256Hex(s.result.output),
+              result_preview: s.result.output.slice(0, 2000),
+              fingerprint: s.fingerprint,
+              mutating: s.result.mutating ? 1 : 0,
               decision,
-              detail: {
-                step: n,
-                ok: s.result.ok,
-                label: s.result.label,
-                ...(s.result.blocked ? { blockedBy: s.result.blocked } : {}),
+            });
+            appendAudit(
+              db,
+              {
+                actor,
+                action: `tool.${s.call.name}`,
+                runId,
+                target,
+                decision,
+                detail: {
+                  step: n,
+                  ok: s.result.ok,
+                  label: s.result.label,
+                  ...(s.result.blocked ? { blockedBy: s.result.blocked } : {}),
+                },
               },
-            },
-            now,
-          );
-          o.onEvent?.({
-            type: "tool",
-            seq: steps,
-            name: s.call.name,
-            target,
-            label: s.result.label,
-            ok: s.result.ok,
-            blocked: s.result.blocked,
-          });
+              now,
+            );
+            o.onEvent?.({
+              type: "tool",
+              seq: steps,
+              name: s.call.name,
+              target,
+              label: s.result.label,
+              ok: s.result.ok,
+              blocked: s.result.blocked,
+            });
+          },
         },
-      },
-    });
-    for (const m of result.messages.slice(initial.length)) transcript(m);
-    tokensIn = result.tokensIn;
-    tokensOut = result.tokensOut;
+      });
+      for (const m of result.messages.slice(initial.length)) transcript(m);
+      tokensIn += result.tokensIn;
+      tokensOut += result.tokensOut;
+      out = result.outcome;
+    }
     db.query("UPDATE runs SET tokens_in = ?, tokens_out = ? WHERE id = ?").run(tokensIn, tokensOut, runId);
 
-    const out = result.outcome;
     const base = { runId, steps, tokensIn, tokensOut, costUsd: budget.runSpent, secs: (now() - started) / 1000 };
     if (out.kind === "finished") {
       const diff = cow.diff(runId);
