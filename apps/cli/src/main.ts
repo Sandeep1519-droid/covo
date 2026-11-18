@@ -1,10 +1,13 @@
 import { covoHome, VERSION } from "@covo/core";
-import type { ModelProvider } from "@covo/models";
+import type { Detected, ModelConfig, ModelProvider } from "@covo/models";
+import type { SecretStore } from "@covo/platform";
 import { auditCommand } from "./commands/audit.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { initCommand } from "./commands/init.ts";
+import { modelsCommand } from "./commands/models.ts";
 import { diffCommand, discardCommand, keepCommand } from "./commands/review.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
+import type { Prompter } from "./prompt.ts";
 
 const HELP = `covo ${VERSION}: Covo command line
 
@@ -15,7 +18,8 @@ Commands (Phase 1):
   init                Create ~/Covo and the default workspace
   audit verify        Check the activity log for tampering
   doctor [check]      Check instant copies, the sandbox and the model
-  run "<task>"        Give the main bot a task on a safe copy  [--model <name>]
+  models              Connect the AI you use (Claude, GPT, Gemini, local…); "covo models add"
+  run "<task>"        Give the main bot a task on a safe copy  [--model <saved model or name>]
   status              Show recent runs
   log <run>           Show a run's steps ("last" for the latest)
   diff <run>          Show what a run changed  [--stat for a summary]
@@ -56,12 +60,21 @@ export interface Ctx {
   provider?: ModelProvider;
   /** Colour diffs (set by the entry point when writing to a terminal). */
   color?: boolean;
+  /** Asks questions; set by the entry point when running in a terminal. */
+  prompt?: Prompter;
+  /** Tests replace these. */
+  secrets?: SecretStore;
+  listModels?: (c: ModelConfig, signal?: AbortSignal) => Promise<string[]>;
+  detect?: (env: Record<string, string | undefined>) => Promise<Detected>;
+  readStdin?: () => Promise<string>;
 }
 
 export async function main(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
-  extra: Partial<Pick<Ctx, "print" | "provider" | "now" | "color">> = {},
+  extra: Partial<
+    Pick<Ctx, "print" | "provider" | "now" | "color" | "prompt" | "secrets" | "listModels" | "detect" | "readStdin">
+  > = {},
 ): Promise<CliResult> {
   const [cmd, ...rest] = argv;
   const ctx: Ctx = { home: covoHome(env), now: Date.now, env, print: (t) => process.stdout.write(t), ...extra };
@@ -73,6 +86,7 @@ export async function main(
   if (cmd === "run") return runCommand(ctx, rest);
   if (cmd === "status") return statusCommand(ctx);
   if (cmd === "log") return logCommand(ctx, rest);
+  if (cmd === "models") return modelsCommand(ctx, rest);
   if (cmd === "diff") return diffCommand(ctx, rest);
   if (cmd === "keep") return keepCommand(ctx, rest);
   if (cmd === "discard") return discardCommand(ctx, rest);

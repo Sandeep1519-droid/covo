@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { covoPaths, tildify } from "@covo/core";
-import { checkModels, ModelConfigError, modelConfig } from "@covo/models";
+import { checkModels, ModelConfigError, modelConfig, resolveModel } from "@covo/models";
+import { SecretError, secrets } from "@covo/platform";
 import { checkClone, checkSandbox } from "@covo/sandbox";
 import type { CliResult, Ctx } from "../main.ts";
 
@@ -49,10 +50,13 @@ export async function doctorCommand(ctx: Ctx, args: string[]): Promise<CliResult
   }
   if (which === "all" || which === "models") {
     try {
-      const cfg = modelConfig(ctx.env, { requireModel: false });
+      const cfg =
+        ctx.env.COVO_PROVIDER || ctx.env.COVO_MODEL_BASE_URL
+          ? modelConfig(ctx.env, { requireModel: false })
+          : await resolveModel(ctx.home, ctx.secrets ?? secrets(), ctx.env);
       list(`Models (${cfg.model || "no model chosen"} via ${cfg.label})`, await checkModels(cfg));
     } catch (e) {
-      if (!(e instanceof ModelConfigError)) throw e;
+      if (!(e instanceof ModelConfigError || e instanceof SecretError)) throw e;
       list("Models", [{ name: "Settings", status: "fail", detail: e.message }]);
     }
   }

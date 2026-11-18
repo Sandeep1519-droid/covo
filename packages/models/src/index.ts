@@ -9,6 +9,20 @@ export {
   modelConfig,
   providerFromConfig,
 } from "./config.ts";
+export type { AddConnection, Connection, Resolved, Settings } from "./connections.ts";
+export {
+  addConnection,
+  loadSettings,
+  NAME_RE,
+  removeConnection,
+  resolveModel,
+  saveSettings,
+  setDefault,
+  settingsPath,
+  suggestName,
+} from "./connections.ts";
+export type { Detected } from "./detect.ts";
+export { detect } from "./detect.ts";
 export type { ModelCheck } from "./doctor.ts";
 export { checkModels, listModelsFor } from "./doctor.ts";
 export { MockProvider } from "./mock.ts";

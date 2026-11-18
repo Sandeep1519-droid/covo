@@ -11,6 +11,7 @@
     "@covo/db": "workspace:*",
     "@covo/sandbox": "workspace:*",
     "@covo/models": "workspace:*",
+    "@covo/platform": "workspace:*",
     "@covo/engine": "workspace:*"
   }
 }

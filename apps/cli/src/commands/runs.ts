@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { covoPaths, tildify } from "@covo/core";
 import { auditForRun, openDb } from "@covo/db";
 import { RunError, type RunEvent, startRun } from "@covo/engine";
-import { type ModelConfig, ModelConfigError, type ModelProvider, modelConfig, providerFromConfig } from "@covo/models";
+import { type ModelConfig, ModelConfigError, type ModelProvider, providerFromConfig, resolveModel } from "@covo/models";
+import { SecretError, secrets } from "@covo/platform";
 import type { CliResult, Ctx } from "../main.ts";
 
 const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
@@ -56,10 +57,10 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   let cfg: ModelConfig;
   let provider: ModelProvider;
   try {
-    cfg = modelConfig(model ? { ...ctx.env, COVO_MODEL: model } : ctx.env);
+    cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), ctx.env, model);
     provider = ctx.provider ?? providerFromConfig(cfg);
   } catch (e) {
-    if (e instanceof ModelConfigError) return { code: 1, out: `${e.message}\n` };
+    if (e instanceof ModelConfigError || e instanceof SecretError) return { code: 1, out: `${e.message}\n` };
     throw e;
   }
   const print = ctx.print;

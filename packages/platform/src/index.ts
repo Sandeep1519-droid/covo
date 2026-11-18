@@ -2,6 +2,7 @@
 // can be added later without touching the engine (see docs/PHASE1.md §2).
 
 import { macCloner } from "./mac/clonefile.ts";
+import { macKeychain } from "./mac/keychain.ts";
 import { macSandbox } from "./mac/seatbelt.ts";
 
 export type CloneMethod = "clonefile" | "copy";
@@ -35,12 +36,19 @@ export interface Sandbox {
 }
 
 export interface SecretStore {
-  get(id: string): Promise<string | null>; // Phase 2
-  put(id: string, value: string): Promise<void>;
+  get(id: string): Promise<string | null>;
+  /** `label` is a human-readable name shown in Keychain Access. */
+  put(id: string, value: string, label?: string): Promise<void>;
+  delete(id: string): Promise<void>;
 }
 
 export interface PresenceAuth {
   confirm(reason: string): Promise<boolean>; // Phase 2
+}
+
+export function secrets(): SecretStore {
+  if (process.platform === "darwin") return macKeychain();
+  throw new Error(`Covo doesn't support ${process.platform} yet`);
 }
 
 export function cloner(): WorkspaceCloner {
@@ -53,5 +61,6 @@ export function sandbox(): Sandbox {
   throw new Error(`Covo doesn't support ${process.platform} yet`);
 }
 
+export { KEYCHAIN_SERVICE, memorySecrets, SecretError } from "./mac/keychain.ts";
 export { buildProfile } from "./mac/seatbelt.ts";
-export { macCloner, macSandbox };
+export { macCloner, macKeychain, macSandbox };

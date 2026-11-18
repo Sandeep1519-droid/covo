@@ -21,6 +21,7 @@
         "@covo/db": "workspace:*",
         "@covo/engine": "workspace:*",
         "@covo/models": "workspace:*",
+        "@covo/platform": "workspace:*",
         "@covo/sandbox": "workspace:*",
       },
     },
@@ -51,6 +52,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@anthropic-ai/sdk": "^1.10.0",
+        "@covo/platform": "workspace:*",
       },
     },
     "packages/platform": {
