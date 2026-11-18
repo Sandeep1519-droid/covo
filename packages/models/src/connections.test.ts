@@ -107,3 +107,10 @@ test("detect reports running local models, keys in the environment and AI comman
   const none = await detect({}, { listOllama: () => Promise.reject(new Error("down")), which: () => null });
   expect(none).toEqual({ ollama: null, envKeys: [], clis: [] });
 });
+
+test('"local" is the free local model when nothing is saved under that name', async () => {
+  const store = memorySecrets();
+  expect(await resolveModel(home, store, {}, "local")).toMatchObject({ kind: "ollama", model: "qwen3.5:4b" });
+  await addConnection(home, store, { name: "claude", provider: "anthropic", model: "claude-opus-5-5", key: "k1" });
+  expect(await resolveModel(home, store, {}, "local")).toMatchObject({ kind: "ollama", model: "qwen3.5:4b" });
+});

@@ -161,6 +161,8 @@ export async function resolveModel(
   const s = loadSettings(home);
   const byName = use ? s.connections.find((c) => c.name === use) : undefined;
   const conn = byName ?? s.connections.find((c) => c.name === s.default);
+  // "local" means the free local model unless you saved a model under that name.
+  if (use === "local" && !byName) return modelConfig(env);
   if (!conn) return modelConfig(use ? { ...env, COVO_MODEL: use } : env);
   const engine = engineById(conn.provider);
   // An unsaved name never means an engine: "local" is the free local model, anything else a model

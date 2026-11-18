@@ -217,7 +217,11 @@ export async function runTool(name: string, args: Record<string, unknown>, ctx: 
           tmp: ctx.tmp,
           timeoutMs: ctx.commandTimeoutMs,
         });
-        const blocked = /Operation not permitted|sandbox|Could not resolve host/i.test(r.stderr);
+        // Some tools hide the sandbox's refusal (curl -s prints nothing), and bots never have network
+        // access, so a failed network command counts as blocked too.
+        const blocked =
+          /Operation not permitted|authorization denied|sandbox|Could not resolve host/i.test(r.stderr) ||
+          /(^|[\s;&|(/])(curl|wget|nc|ncat|ssh|scp|sftp|rsync|ftp|telnet)(\s|$)/.test(args.command);
         const parts = [`exit code ${r.code}${r.timedOut ? " (stopped: took too long)" : ""}`];
         if (r.stdout) parts.push(`stdout:\n${clip(r.stdout, 6_000)}`);
         if (r.stderr) parts.push(`stderr:\n${clip(r.stderr, 2_000)}`);
