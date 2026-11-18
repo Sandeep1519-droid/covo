@@ -37,6 +37,8 @@ export interface Settings {
   default?: string;
   connections: Connection[];
   limits?: Partial<Limits>;
+  /** A power profile you chose (covo profile set); absent = detect from the Mac. */
+  profile?: string;
 }
 
 const EMPTY: Settings = { version: 1, connections: [] };
@@ -54,6 +56,7 @@ export function loadSettings(home: string): Settings {
       connections: Array.isArray(s.connections) ? s.connections : [],
       default: s.default,
       ...(s.limits ? { limits: s.limits } : {}),
+      ...(s.profile ? { profile: s.profile } : {}),
     };
   } catch (e) {
     throw new ModelConfigError(`${p} is damaged (${(e as Error).message}). Fix or delete it.`);
@@ -161,6 +164,7 @@ export async function resolveModel(
       COVO_MODEL: use && !byName ? use : conn.model,
       COVO_MODEL_CONTEXT: env.COVO_MODEL_CONTEXT,
       COVO_MODEL_THINK: env.COVO_MODEL_THINK,
+      COVO_MODEL_KEEP_ALIVE: env.COVO_MODEL_KEEP_ALIVE,
     }),
     connection: conn.name,
   };
@@ -195,4 +199,16 @@ export function setLimits(home: string, changes: Partial<Limits>): Limits {
   s.limits = { ...s.limits, ...changes };
   saveSettings(home, s);
   return getLimits(home);
+}
+
+export function getProfileChoice(home: string): string | undefined {
+  return loadSettings(home).profile;
+}
+
+/** Saves a chosen power profile; undefined goes back to detecting it. */
+export function setProfileChoice(home: string, name: string | undefined): void {
+  const s = loadSettings(home);
+  if (name) s.profile = name;
+  else delete s.profile;
+  saveSettings(home, s);
 }

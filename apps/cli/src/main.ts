@@ -1,11 +1,12 @@
 import { covoHome, VERSION } from "@covo/core";
 import type { Detected, ModelConfig, ModelProvider } from "@covo/models";
-import type { SecretStore } from "@covo/platform";
+import type { SecretStore, SystemInfo } from "@covo/platform";
 import { auditCommand } from "./commands/audit.ts";
 import { botsCommand } from "./commands/bots.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { initCommand } from "./commands/init.ts";
 import { modelsCommand } from "./commands/models.ts";
+import { profileCommand } from "./commands/profile.ts";
 import { diffCommand, discardCommand, keepCommand, undoCommand } from "./commands/review.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
 import { decideCommand, limitsCommand, pricesCommand, usageCommand } from "./commands/spend.ts";
@@ -26,6 +27,7 @@ Commands (Phase 1):
   status              Show recent runs
   approve [run]       Let a paused task spend more ("covo deny" stops it instead)
   usage               What your bots spent, by model, bot and day  [--days N]
+  profile             How Covo sizes itself to this Mac  [set <8gb|16gb|32gb|48gb|64gb|auto>]
   limits              Spending limits per task and per day  [--task <amount>] [--day <amount>]
   prices              Model prices Covo uses  [set <model> <in> <out>]
   log <run>           Show a run's steps ("last" for the latest)
@@ -75,13 +77,28 @@ export interface Ctx {
   listModels?: (c: ModelConfig, signal?: AbortSignal) => Promise<string[]>;
   detect?: (env: Record<string, string | undefined>) => Promise<Detected>;
   readStdin?: () => Promise<string>;
+  system?: () => SystemInfo;
+  ollamaModels?: () => Promise<{ name: string; parameterSize?: string }[]>;
 }
 
 export async function main(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
   extra: Partial<
-    Pick<Ctx, "print" | "provider" | "now" | "color" | "prompt" | "secrets" | "listModels" | "detect" | "readStdin">
+    Pick<
+      Ctx,
+      | "print"
+      | "provider"
+      | "now"
+      | "color"
+      | "prompt"
+      | "secrets"
+      | "listModels"
+      | "detect"
+      | "readStdin"
+      | "system"
+      | "ollamaModels"
+    >
   > = {},
 ): Promise<CliResult> {
   const [cmd, ...rest] = argv;
@@ -96,6 +113,7 @@ export async function main(
   if (cmd === "log") return logCommand(ctx, rest);
   if (cmd === "models") return modelsCommand(ctx, rest);
   if (cmd === "bots") return botsCommand(ctx, rest);
+  if (cmd === "profile") return profileCommand(ctx, rest);
   if (cmd === "approve") return decideCommand(ctx, rest, true);
   if (cmd === "deny") return decideCommand(ctx, rest, false);
   if (cmd === "usage") return usageCommand(ctx, rest);

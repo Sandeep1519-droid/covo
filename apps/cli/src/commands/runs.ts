@@ -14,6 +14,7 @@ import {
 } from "@covo/models";
 import { SecretError, secrets } from "@covo/platform";
 import type { CliResult, Ctx } from "../main.ts";
+import { currentCapacity } from "./profile.ts";
 
 const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
 const ago = (ms: number) => {
@@ -64,6 +65,15 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
   const goal = words.join(" ").trim();
   if (!goal) return { code: 2, out: 'Usage: covo run "<task>" [--bot <name>] [--model <saved model or name>]\n' };
 
+  // How much this Mac can take right now (power profile, ADR-011).
+  const cap = currentCapacity(ctx);
+  if (!cap.canStart) return { code: 1, out: `Not starting: ${cap.notes.join(" ")}\n` };
+  const env = {
+    ...ctx.env,
+    COVO_MODEL_CONTEXT: ctx.env.COVO_MODEL_CONTEXT ?? String(cap.profile.contextTokens),
+    COVO_MODEL_KEEP_ALIVE: ctx.env.COVO_MODEL_KEEP_ALIVE ?? cap.profile.keepAlive,
+  };
+
   // Which models: --model, else the bot's own list, else the default.
   let bot: Bot | undefined;
   const entries: { label: string; cfg: ModelConfig; provider: ModelProvider }[] = [];
@@ -73,7 +83,7 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
     const names: (string | undefined)[] = model ? [model] : bot?.models.length ? bot.models : [undefined];
     for (const n of names) {
       try {
-        const cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), ctx.env, n);
+        const cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), env, n);
         const provider = ctx.provider ?? providerFromConfig(cfg);
         entries.push({ label: n ?? cfg.connection ?? cfg.model, cfg, provider });
       } catch (e) {
@@ -139,6 +149,7 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
 
   try {
     for (const w of skipped) print(`Skipping ${w}\n`);
+    for (const n of cap.notes) print(`Note: ${n}\n`);
     const r = await startRun({
       home: ctx.home,
       goal,
@@ -147,6 +158,7 @@ export async function runCommand(ctx: Ctx, args: string[]): Promise<CliResult> {
       signal: controller.signal,
       onEvent,
       now: ctx.now,
+      maxConcurrent: cap.maxRuns,
       spend: getLimits(ctx.home),
       prices: loadUserPrices(ctx.home),
       ...(ctx.prompt

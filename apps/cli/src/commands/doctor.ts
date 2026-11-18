@@ -4,8 +4,9 @@ import { checkModels, ModelConfigError, modelConfig, resolveModel } from "@covo/
 import { SecretError, secrets } from "@covo/platform";
 import { checkClone, checkSandbox } from "@covo/sandbox";
 import type { CliResult, Ctx } from "../main.ts";
+import { describeProfile } from "./profile.ts";
 
-const CHECKS = ["clone", "sandbox", "models"] as const;
+const CHECKS = ["mac", "clone", "sandbox", "models"] as const;
 type Status = "pass" | "fail" | "warn" | "skip";
 const MARK: Record<Status, string> = { pass: "✓", fail: "✗", warn: "!", skip: "–" };
 
@@ -28,6 +29,11 @@ export async function doctorCommand(ctx: Ctx, args: string[]): Promise<CliResult
     sections.push(lines);
   };
 
+  if (which === "all" || which === "mac") {
+    const { lines, cap } = await describeProfile(ctx);
+    sections.push([`This Mac (${cap.profile.label} profile)`, ...lines]);
+    if (!cap.canStart) failed++;
+  }
   if (which === "all" || which === "clone") {
     const c = checkClone(p.runs);
     const ms = c.ms < 10 ? c.ms.toFixed(1) : c.ms.toFixed(0);

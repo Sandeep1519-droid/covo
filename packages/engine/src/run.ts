@@ -62,6 +62,8 @@ export interface StartRunOptions {
   /** Answers a spending pause directly; without it the run waits for `covo approve`. */
   askApproval?: AskApproval;
   approvalPollMs?: number;
+  /** Tasks allowed at once (from the power profile); defaults to the department's setting. */
+  maxConcurrent?: number;
 }
 
 export interface RunSummary {
@@ -145,8 +147,13 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       `SELECT COUNT(*) AS n FROM runs WHERE department_id = ? AND state IN (${ACTIVE.map((s) => `'${s}'`).join(",")})`,
     )
     .get(dept.id);
-  if ((busy?.n ?? 0) >= dept.max_concurrency) {
-    throw new RunError("Another task is already running here. On an 8 GB Mac, Covo runs one task at a time.");
+  const allowed = o.maxConcurrent ?? dept.max_concurrency;
+  if ((busy?.n ?? 0) >= allowed) {
+    throw new RunError(
+      allowed === 1
+        ? "Another task is already running. This Mac runs one task at a time; try again when it finishes (see: covo status)."
+        : `${busy?.n} tasks are already running, the most this Mac runs at once. Try again when one finishes (see: covo status).`,
+    );
   }
 
   if (!o.chain?.length && !o.provider) throw new RunError("No model to run with.");

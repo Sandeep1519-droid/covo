@@ -215,3 +215,20 @@ export class OllamaProvider implements ModelProvider {
     yield* parseOllamaStream(decode(res.body));
   }
 }
+
+/** Installed Ollama models with their size in parameters ("4.0B"), from /api/tags. */
+export async function listOllamaModels(
+  baseUrl = "http://127.0.0.1:11434",
+  signal?: AbortSignal,
+): Promise<{ name: string; parameterSize?: string; bytes: number }[]> {
+  const res = await fetch(`${ollamaRoot(baseUrl)}/api/tags`, { signal });
+  if (!res.ok) throw new Error(`Ollama answered ${res.status}`);
+  const j = (await res.json()) as {
+    models?: { name: string; size?: number; details?: { parameter_size?: string } }[];
+  };
+  return (j.models ?? []).map((m) => ({
+    name: m.name,
+    ...(m.details?.parameter_size ? { parameterSize: m.details.parameter_size } : {}),
+    bytes: m.size ?? 0,
+  }));
+}

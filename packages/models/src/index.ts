@@ -14,6 +14,7 @@ export {
   addConnection,
   DEFAULT_LIMITS,
   getLimits,
+  getProfileChoice,
   loadSettings,
   NAME_RE,
   removeConnection,
@@ -21,6 +22,7 @@ export {
   saveSettings,
   setDefault,
   setLimits,
+  setProfileChoice,
   settingsPath,
   suggestName,
 } from "./connections.ts";
@@ -32,7 +34,14 @@ export type { ChainEntry, FallbackSwitch } from "./fallback.ts";
 export { FallbackProvider } from "./fallback.ts";
 export { MockProvider } from "./mock.ts";
 export type { OllamaOptions } from "./ollama.ts";
-export { DEFAULT_CONTEXT, OllamaProvider, ollamaRoot, parseOllamaStream, toOllamaWire } from "./ollama.ts";
+export {
+  DEFAULT_CONTEXT,
+  listOllamaModels,
+  OllamaProvider,
+  ollamaRoot,
+  parseOllamaStream,
+  toOllamaWire,
+} from "./ollama.ts";
 export type { OpenAICompatibleOptions } from "./openai-compatible.ts";
 export { listModels, OpenAICompatibleProvider, parseStream, toWire } from "./openai-compatible.ts";
 export type { Preset, ProviderKind } from "./presets.ts";

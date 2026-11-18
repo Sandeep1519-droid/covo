@@ -4,6 +4,8 @@ export type { AskApproval, SpendLimits, SpendRequest } from "./budget.ts";
 export { Budget, decide, startOfLocalDay, usd } from "./budget.ts";
 export type { LoopHooks, LoopInput, LoopLimits, LoopOutcome, LoopResult, ModelTurn, ToolStep } from "./loop.ts";
 export { DEFAULT_LIMITS, NUDGE, runLoop } from "./loop.ts";
+export type { Capacity, LocalModel, Profile, ProfileName } from "./profile.ts";
+export { capacity, PROFILES, paramsOf, profileForMemory, suggestLocalModel } from "./profile.ts";
 export { systemPrompt, taskMessage } from "./prompt.ts";
 export type { FileReview, KeepOutcome, Review, UndoOutcome } from "./review.ts";
 export { discardRun, keepChanges, keepRun, reviewRun, UNDO_MAX_AGE_MS, UNDO_MAX_BYTES, undoRun } from "./review.ts";

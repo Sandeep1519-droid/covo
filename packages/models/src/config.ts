@@ -35,6 +35,8 @@ export interface ModelConfig {
   /** Ollama only. */
   numCtx?: number;
   think?: boolean;
+  /** How long Ollama keeps the model loaded, e.g. "60s". */
+  keepAlive?: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -87,6 +89,8 @@ export function modelConfig(env: Env = process.env, opts: { requireModel?: boole
     const n = Number(env.COVO_MODEL_CONTEXT);
     c.numCtx = Number.isInteger(n) && n >= 2048 ? n : DEFAULT_CONTEXT;
     c.think = /^(on|1|true|yes)$/i.test(env.COVO_MODEL_THINK ?? "");
+    if (env.COVO_MODEL_KEEP_ALIVE && /^\d+[smh]?$/.test(env.COVO_MODEL_KEEP_ALIVE))
+      c.keepAlive = env.COVO_MODEL_KEEP_ALIVE;
   }
   return c;
 }
@@ -106,7 +110,13 @@ export function providerFromConfig(c: ModelConfig): ModelProvider {
     return new AnthropicProvider({ apiKey: c.apiKey, model: c.model, ...(official ? {} : { baseUrl: c.baseUrl }) });
   }
   if (c.kind === "ollama") {
-    return new OllamaProvider({ baseUrl: c.baseUrl, model: c.model, numCtx: c.numCtx, think: c.think });
+    return new OllamaProvider({
+      baseUrl: c.baseUrl,
+      model: c.model,
+      numCtx: c.numCtx,
+      think: c.think,
+      ...(c.keepAlive ? { keepAlive: c.keepAlive } : {}),
+    });
   }
   return new OpenAICompatibleProvider({ name: c.name, baseUrl: c.baseUrl, model: c.model, apiKey: c.apiKey });
 }

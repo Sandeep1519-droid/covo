@@ -4,6 +4,7 @@
 import { macCloner } from "./mac/clonefile.ts";
 import { macKeychain } from "./mac/keychain.ts";
 import { macSandbox } from "./mac/seatbelt.ts";
+import { macSystemInfo, type SystemInfo } from "./mac/system.ts";
 
 export type CloneMethod = "clonefile" | "copy";
 
@@ -51,6 +52,11 @@ export function secrets(): SecretStore {
   throw new Error(`Covo doesn't support ${process.platform} yet`);
 }
 
+export function systemInfo(): SystemInfo {
+  if (process.platform === "darwin") return macSystemInfo();
+  throw new Error(`Covo doesn't support ${process.platform} yet`);
+}
+
 export function cloner(): WorkspaceCloner {
   if (process.platform === "darwin") return macCloner;
   throw new Error(`Covo doesn't support ${process.platform} yet`);
@@ -63,4 +69,6 @@ export function sandbox(): Sandbox {
 
 export { KEYCHAIN_SERVICE, memorySecrets, SecretError } from "./mac/keychain.ts";
 export { buildProfile } from "./mac/seatbelt.ts";
+export type { SystemInfo } from "./mac/system.ts";
+export { macSystemInfo, parseBattery, parsePressure, parseThermal } from "./mac/system.ts";
 export { macCloner, macKeychain, macSandbox };
