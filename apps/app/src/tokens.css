@@ -1,0 +1,107 @@
+/* Design tokens, one-to-one with the Figma variables in "Covo App Design" (ADR-006).
+   Color collection: modes Light and Dark. Radius collection: Soft (light theme) and Default (dark).
+   The app sets <html data-theme="light|dark"> from Settings (default: follow the system). */
+
+:root {
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --radius-full: 999px;
+
+  --color-avatar-eye: #ffffff;
+
+  /* Light */
+  color-scheme: light;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 18px;
+  --color-bg-app: #ffffff;
+  --color-bg-surface: #f4f4f6;
+  --color-bg-raised: #ffffff;
+  --color-bg-hover: #e9e9ee;
+  --color-bg-input: #ffffff;
+  --color-border-subtle: #ececf0;
+  --color-border-default: #dcdce2;
+  --color-text-primary: #1d1d1f;
+  --color-text-secondary: #4a4a52;
+  --color-text-muted: #8a8a94;
+  --color-text-disabled: #b4b4bc;
+  --color-text-on-accent: #ffffff;
+  --color-accent-default: #1d1d1f;
+  --color-accent-strong: #1d1d1f;
+  --color-accent-subtle: #e9e9ee;
+  --color-status-warning: #c77406;
+  --color-status-warning-subtle: #fdf2e1;
+  --color-status-danger: #d92d2d;
+  --color-status-danger-subtle: #fdecec;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --color-bg-app: #181818;
+  --color-bg-surface: #1f1f1f;
+  --color-bg-raised: #262626;
+  --color-bg-hover: #2c2c2c;
+  --color-bg-input: #262626;
+  --color-border-subtle: #2c2c2c;
+  --color-border-default: #363636;
+  --color-border-strong: #474747;
+  --color-text-primary: #ececec;
+  --color-text-secondary: #b4b4b4;
+  --color-text-muted: #8e8e8e;
+  --color-text-disabled: #5e5e5e;
+  --color-text-on-accent: #111111;
+  --color-accent-default: #f2f2f2;
+  --color-accent-strong: #ececec;
+  --color-accent-subtle: #2c2c2c;
+  --color-status-warning: #e5a13a;
+  --color-status-warning-subtle: #3a2b12;
+  --color-status-danger: #e5534b;
+  --color-status-danger-subtle: #3d1a1f;
+}
+
+/* Text styles */
+.t-display {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+  letter-spacing: -0.005em; /* Figma: -0.5% */
+}
+.t-title-l {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.002em; /* Figma: -0.2% */
+}
+.t-title-m {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+.t-body-m {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+.t-body-m-strong {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.t-body-s {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+}
+.t-caption {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}

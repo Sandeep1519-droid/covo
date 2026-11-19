@@ -1,8 +1,10 @@
 import type { Database } from "bun:sqlite";
+import { userInfo } from "node:os";
 import type {
   ApiApproval,
   ApiBot,
   ApiLimits,
+  ApiMe,
   ApiModel,
   ApiProfile,
   ApiRun,
@@ -52,6 +54,19 @@ import type { Service, ServiceMessage } from "./server.ts";
 
 // Covo's local API (Phase 3 M1): everything the command line does, as JSON, for the app and the
 // Mac app. Same engine functions, same activity log. Keys go in and never come out.
+
+let fullName: string | undefined;
+/** Your name as macOS knows it (for the app's sidebar), else your account name. */
+function userName(): string {
+  if (fullName === undefined) {
+    let n = "";
+    try {
+      n = Bun.spawnSync(["/usr/bin/id", "-F"]).stdout.toString().trim();
+    } catch {}
+    fullName = n || userInfo().username;
+  }
+  return fullName;
+}
 
 class HttpError extends Error {
   constructor(
@@ -318,7 +333,8 @@ function events(service: Service): Response {
         }
       };
       send(": connected\n\n");
-      const beat = setInterval(() => send(": keep-alive\n\n"), 15_000);
+      // Bun closes connections idle for 10 s, so stay well inside that.
+      const beat = setInterval(() => send(": keep-alive\n\n"), 5_000);
       const unwatch = service.watch((m: ServiceMessage) => {
         if (m.type !== "ping") send(`data: ${JSON.stringify(m)}\n\n`);
       });
@@ -367,6 +383,7 @@ export async function handleApi(
         ...service.stats(),
       });
     }
+    if (m === "GET" && a === "me" && !id) return json({ name: userName() } satisfies ApiMe);
     if (a === "session" && m === "DELETE") {
       gate.endSession(req);
       return json({ ok: true }, 200, { "set-cookie": `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0` });

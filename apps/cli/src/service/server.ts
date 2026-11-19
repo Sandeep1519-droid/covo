@@ -10,7 +10,7 @@ import { type Prepared, PrepareError, prepareRun, type RunHeader, type RunReques
 import { json as apiJson, handleApi } from "./api.ts";
 import { serviceHealth, socketPath } from "./client.ts";
 import { apiToken, Gate } from "./gate.ts";
-import { CSP, UI_HTML, UI_JS } from "./ui.ts";
+import { defaultUiDir, uiFile } from "./ui.ts";
 
 // covod, Covo's background service (Phase 3 M0). One process runs every bot task, so a task
 // carries on after the terminal closes, and the app, phone and schedules (later milestones) can
@@ -270,6 +270,7 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
   const service = new Service(ctx, o);
   const wanted = ctx.env.COVO_PORT !== undefined ? Number(ctx.env.COVO_PORT) : API_PORT;
   const gate = new Gate(apiToken(ctx.home), wanted, ctx.now);
+  const uiDir = ctx.env.COVO_UI_DIR ?? defaultUiDir();
 
   // The local API for the app: 127.0.0.1 only, and every request passes the gate (gate.ts).
   let http: ReturnType<typeof Bun.serve> | undefined;
@@ -283,23 +284,7 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
         if (refused && !refused.ok) return apiJson({ error: refused.error }, refused.status);
         const path = new URL(req.url).pathname;
         if (path === "/" || path === "/ui") return new Response(null, { status: 302, headers: { location: "/ui/" } });
-        if (req.method === "GET" && path === "/ui/")
-          return new Response(UI_HTML, {
-            headers: {
-              "content-type": "text/html; charset=utf-8",
-              "content-security-policy": CSP,
-              "cache-control": "no-store",
-              "x-frame-options": "DENY",
-            },
-          });
-        if (req.method === "GET" && path === "/ui/app.js")
-          return new Response(UI_JS, {
-            headers: {
-              "content-type": "text/javascript; charset=utf-8",
-              "cache-control": "no-store",
-              "x-content-type-options": "nosniff",
-            },
-          });
+        if (req.method === "GET" && path.startsWith("/ui/")) return uiFile(uiDir, path.slice(4));
         if (req.method === "POST" && path === "/api/pair") {
           if (!(req.headers.get("content-type") ?? "").startsWith("application/json"))
             return apiJson({ error: "Send JSON." }, 415);

@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
+import { AVATAR_COLORS, AVATAR_SHAPES } from "@covo/api";
 import { covoPaths, newId } from "@covo/core";
 import { appendAudit, DEFAULT_AGENT_ID, DEFAULT_DEPT_ID, migrate, openDb } from "@covo/db";
 import { RunError } from "./run.ts";
@@ -27,8 +28,8 @@ export interface Bot {
   lastRunAt: number | null;
 }
 
-const SHAPES = ["Blob", "Pebble", "Cloud", "Bean", "Drop", "Gem", "Leaf", "Shell", "Bubble", "Spark", "Moon", "Star"];
-const COLORS = ["sky", "mint", "coral", "lavender", "sun", "rose", "teal", "peach", "lime", "violet"];
+const SHAPES: readonly string[] = AVATAR_SHAPES;
+const COLORS: readonly string[] = Object.keys(AVATAR_COLORS);
 
 interface Row {
   id: string;
@@ -143,7 +144,7 @@ export function createBot(home: string, b: NewBot, now: () => number = Date.now)
       .get(dept, name);
     if (clash) throw new RunError(`There's already a bot called "${name}".`);
     const id = newId("bot", now());
-    const pick = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)] as T;
+    const pick = <T>(xs: readonly T[]) => xs[Math.floor(Math.random() * xs.length)] as T;
     db.transaction(() => {
       db.query(
         `INSERT INTO agents (id, department_id, name, avatar_shape, avatar_color, purpose, model_chain, level, run_limit_usd, created_at)

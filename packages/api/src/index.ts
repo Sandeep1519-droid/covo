@@ -14,6 +14,52 @@ export interface ApiError {
 
 export type Level = "supervised" | "automatic" | "full";
 
+/** Bot characters (Figma "Bot avatar"): 12 shapes, and the avatar colours from the Color variables. */
+export const AVATAR_SHAPES = [
+  "Circle",
+  "Squircle",
+  "Blob",
+  "Cloud",
+  "Drop",
+  "Hexagon",
+  "Pill",
+  "Flower",
+  "Triangle",
+  "Diamond",
+  "Gem",
+  "Bean",
+] as const;
+export type AvatarShape = (typeof AVATAR_SHAPES)[number];
+
+export const AVATAR_COLORS = {
+  sky: "#5cb8f2",
+  blue: "#4c8df6",
+  navy: "#3b4ba8",
+  indigo: "#6366f1",
+  violet: "#9b8cff",
+  purple: "#8b5cf6",
+  magenta: "#d45bb8",
+  rose: "#f27bae",
+  red: "#e5534b",
+  wine: "#a3324d",
+  coral: "#f28b6b",
+  orange: "#f2994a",
+  gold: "#f2c14e",
+  sand: "#d8c29d",
+  brown: "#8b5e3c",
+  lime: "#9acd32",
+  green: "#5fcb7a",
+  mint: "#5fd39a",
+  teal: "#3cc4b4",
+  silver: "#a8a8ae",
+} as const;
+export type AvatarColor = keyof typeof AVATAR_COLORS;
+
+/** GET /api/me: who is using this Mac. */
+export interface ApiMe {
+  name: string;
+}
+
 export interface ApiHealth {
   ok: true;
   version: string;

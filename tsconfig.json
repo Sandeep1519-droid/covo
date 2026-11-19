@@ -14,5 +14,6 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"],
+  "exclude": ["apps/app"]
 }

@@ -1,65 +1,71 @@
-// A small page at /ui until the real app arrives (Phase 3 M2). It signs the browser in with the
-// one-time code from `covo app`, then shows your bots and recent tasks through the API, which
-// proves the whole path works. It holds no data itself, so it needs no sign-in to load.
+// Serves the app (apps/app, Phase 3 M2) at /ui from its build folder. The page holds no data itself:
+// it signs in with the one-time code from `covo app` and then talks to /api like any other client.
 
+import { existsSync, statSync } from "node:fs";
+import { extname, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Fonts are inlined into the stylesheet (data:), everything else comes from this service.
 export const CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
-export const UI_HTML = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Covo</title>
-<style>
-  :root { color-scheme: light dark; --bg: #fff; --fg: #111; --muted: #666; --line: #e5e5e5; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #f2f2f2; --muted: #999; --line: #2a2a2a; } }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, system-ui, sans-serif; }
-  main { max-width: 720px; margin: 48px auto; padding: 0 16px; }
-  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 28px 0 8px; }
-  p.muted, .muted { color: var(--muted); }
-  ul { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
-  li { padding: 10px 0; border-bottom: 1px solid var(--line); display: flex; gap: 12px; justify-content: space-between; }
-  code { font: 13px ui-monospace, monospace; }
-</style>
-</head>
-<body>
-<main>
-  <h1>Covo</h1>
-  <p class="muted" id="status">Signing in…</p>
-  <section id="data" hidden>
-    <h2>Your bots</h2><ul id="bots"></ul>
-    <h2>Recent tasks</h2><ul id="runs"></ul>
-    <p class="muted">This is a placeholder. The full app arrives in the next update.</p>
-  </section>
-</main>
-<script src="/ui/app.js"></script>
-</body>
-</html>
-`;
+/** Where `bun run app:build` puts the app. COVO_UI_DIR points elsewhere (tests). */
+export const defaultUiDir = () => fileURLToPath(new URL("../../../app/dist/", import.meta.url));
 
-export const UI_JS = `"use strict";
-(async () => {
-  const status = document.getElementById("status");
-  const api = (path, init = {}) =>
-    fetch("/api" + path, { credentials: "same-origin", ...init, headers: { "content-type": "application/json", ...(init.headers || {}) } });
-  const code = new URLSearchParams(location.hash.slice(1)).get("code");
-  if (code) {
-    history.replaceState(null, "", location.pathname); // the code works once; don't keep it around
-    await api("/pair", { method: "POST", body: JSON.stringify({ code }) });
+const SECURITY = {
+  "content-security-policy": CSP,
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
+};
+
+/** Shown when the app hasn't been built (a fresh clone). */
+const NOT_BUILT = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Covo</title><style>
+:root { color-scheme: light dark; } body { margin: 0; font: 15px/1.5 -apple-system, system-ui, sans-serif; }
+main { max-width: 560px; margin: 20vh auto 0; padding: 0 16px; } code { font: 13px ui-monospace, monospace; }
+</style></head><body><main>
+<h1>Covo</h1>
+<p>The app hasn't been built on this Mac yet. In the folder you cloned Covo into, run:</p>
+<p><code>bun run app:build</code></p>
+<p>Then open it again with <code>covo app</code>.</p>
+</main></body></html>`;
+
+/** Hashed file names (from the bundler) never change, so browsers may keep them. */
+const HASHED = /-[a-z0-9]{8}\.[a-z0-9]+$/;
+
+/** Answers a GET under /ui/. `rel` is the part after /ui/. */
+export async function uiFile(dir: string, rel: string): Promise<Response> {
+  const index = join(dir, "index.html");
+  if (!existsSync(index)) {
+    return new Response(NOT_BUILT, {
+      headers: { ...SECURITY, "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+    });
   }
-  const bots = await api("/bots");
-  if (bots.status === 401) {
-    status.textContent = code
-      ? "That sign-in link has expired or was already used. Run covo app again."
-      : "Not signed in. Open Covo from your terminal with: covo app";
-    return;
+  let name: string;
+  try {
+    name = decodeURIComponent(rel);
+  } catch {
+    return new Response("Not found.", { status: 404, headers: SECURITY });
   }
-  const runs = await api("/runs?limit=10");
-  const li = (left, right) => { const e = document.createElement("li"); const a = document.createElement("span"); a.textContent = left; const b = document.createElement("span"); b.className = "muted"; b.textContent = right; e.append(a, b); return e; };
-  for (const b of await bots.json()) document.getElementById("bots").append(li(b.name, b.level + " · " + (b.models.join(", ") || "default model")));
-  for (const r of await runs.json()) document.getElementById("runs").append(li(r.goal, r.state.toLowerCase()));
-  status.textContent = "Signed in to Covo on this Mac.";
-  document.getElementById("data").hidden = false;
-})();
-`;
+  const root = resolve(dir);
+  const target = resolve(root, name || "index.html");
+  if (target !== root && !target.startsWith(root + sep)) {
+    return new Response("Not found.", { status: 404, headers: SECURITY });
+  }
+  let file = target;
+  if (!existsSync(file) || !statSync(file).isFile()) {
+    // A screen's address (e.g. /ui/settings) gets the app; a missing file is a 404.
+    if (extname(name)) return new Response("Not found.", { status: 404, headers: SECURITY });
+    file = index;
+  }
+  const f = Bun.file(file);
+  return new Response(f, {
+    headers: {
+      ...SECURITY,
+      "content-type": f.type,
+      "cache-control": HASHED.test(file) ? "public, max-age=31536000, immutable" : "no-store",
+    },
+  });
+}

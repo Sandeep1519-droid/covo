@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ApiBot, ApiModel, ApiRun, ApiRunDetail } from "@covo/api";
@@ -20,7 +20,8 @@ let running: Running;
 let base: string;
 let token: string;
 const secrets = memorySecrets();
-const env = () => ({ COVO_HOME: home, HOME: root, COVO_PORT: "0" });
+let uiDir: string;
+const env = () => ({ COVO_HOME: home, HOME: root, COVO_PORT: "0", COVO_UI_DIR: uiDir });
 const mac8: () => SystemInfo = () => ({
   memoryGB: 8,
   chip: "Apple M3",
@@ -34,6 +35,11 @@ const mac8: () => SystemInfo = () => ({
 beforeEach(async () => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "covo-api-")));
   home = join(root, "Covo");
+  uiDir = join(root, "ui");
+  mkdirSync(uiDir);
+  writeFileSync(join(uiDir, "index.html"), "<!doctype html><title>Covo</title>");
+  writeFileSync(join(uiDir, "chunk-abcd1234.js"), "console.log(1)");
+  writeFileSync(join(root, "secret.txt"), "not for the web");
   await main(["init"], env());
   writeFileSync(join(home, "workspaces/default/README.md"), "# Demo\n");
   const ctx: Ctx = {
@@ -166,7 +172,44 @@ describe("who may use the API", () => {
   });
 });
 
+describe("the app at /ui", () => {
+  test("serves the built app with a strict policy; screens get the app, missing files a 404", async () => {
+    const page = await fetch(`${base}/ui/`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("<title>Covo</title>");
+    expect(page.headers.get("content-security-policy")).toContain("script-src 'self'");
+    expect(page.headers.get("cache-control")).toBe("no-store");
+    const js = await fetch(`${base}/ui/chunk-abcd1234.js`);
+    expect(js.headers.get("cache-control")).toContain("immutable");
+    expect(js.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await (await fetch(`${base}/ui/settings`)).text()).toContain("<title>Covo</title>");
+    expect((await fetch(`${base}/ui/nope.js`)).status).toBe(404);
+    expect((await fetch(`${base}/`, { redirect: "manual" })).headers.get("location")).toBe("/ui/");
+  });
+
+  test("nothing outside the app's folder can be read", async () => {
+    const port = running.port as number;
+    for (const p of ["/ui/../secret.txt", "/ui/%2e%2e/secret.txt", "/ui/..%2fsecret.txt", "/ui/%2e%2e%2fsecret.txt"]) {
+      const line = await raw([`GET ${p} HTTP/1.1`, `Host: 127.0.0.1:${port}`]);
+      expect(line).not.toContain("200 OK");
+    }
+    const r = await fetch(`${base}/ui/..%2fsecret.txt`);
+    expect(await r.text()).not.toContain("not for the web");
+  });
+
+  test("before the app is built, the page says how to build it", async () => {
+    rmSync(join(uiDir, "index.html"));
+    const page = await fetch(`${base}/ui/`);
+    expect(await page.text()).toContain("bun run app:build");
+  });
+});
+
 describe("what the API does", () => {
+  test("me: your name for the sidebar", async () => {
+    const me = (await (await api("/me")).json()) as { name: string };
+    expect(me.name.length).toBeGreaterThan(0);
+  });
+
   test("bots: create, change, list, archive", async () => {
     const made = (await (
       await api("/bots", { method: "POST", body: JSON.stringify({ name: "Docs helper", level: "supervised" }) })

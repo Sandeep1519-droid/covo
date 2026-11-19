@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@covo/api": "workspace:*",
     "@covo/core": "workspace:*",
     "@covo/db": "workspace:*",
     "@covo/models": "workspace:*",
