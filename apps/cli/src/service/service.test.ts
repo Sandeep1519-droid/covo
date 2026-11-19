@@ -16,7 +16,7 @@ import { type Running, type ServiceMessage, ServiceRunningError, serve } from ".
 let root: string;
 let home: string;
 let running: Running | undefined;
-const env = () => ({ COVO_HOME: home, HOME: root });
+const env = () => ({ COVO_HOME: home, HOME: root, COVO_PORT: "0" });
 const mac8: () => SystemInfo = () => ({
   memoryGB: 8,
   chip: "Apple M3",

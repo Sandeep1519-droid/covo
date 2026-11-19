@@ -10,7 +10,7 @@ import { modelsCommand } from "./commands/models.ts";
 import { profileCommand } from "./commands/profile.ts";
 import { diffCommand, discardCommand, keepCommand, undoCommand } from "./commands/review.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
-import { type Launchctl, serviceCommand, stopCommand } from "./commands/service.ts";
+import { appCommand, type Launchctl, serviceCommand, stopCommand } from "./commands/service.ts";
 import { decideCommand, limitsCommand, pricesCommand, usageCommand } from "./commands/spend.ts";
 import type { Prompter } from "./prompt.ts";
 import { serviceHealth } from "./service/client.ts";
@@ -30,6 +30,7 @@ Commands (Phase 1):
   run "<task>"        Give a bot a task on a safe copy  [--bot <name>] [--model <saved model>] [--here]
   stop <run>          Stop a task Covo's service is running
   service             Covo's background service: status, install, uninstall
+  app                 Open Covo in your browser, signed in
   status              Show recent runs
   approve [run]       Let a paused task spend more ("covo deny" stops it instead)
   usage               What your bots spent, by model, bot and day  [--days N]
@@ -91,6 +92,8 @@ export interface Ctx {
   engine?: Engine;
   /** Tests replace launchctl (covo service install/uninstall). */
   launchctl?: Launchctl;
+  /** Tests replace opening the browser (covo app). */
+  openUrl?: (url: string) => boolean;
   /** Tests learn when `covo service run` is up. */
   serviceStarted?: (r: Running) => void;
 }
@@ -116,6 +119,7 @@ export async function main(
       | "engine"
       | "launchctl"
       | "serviceStarted"
+      | "openUrl"
     >
   > = {},
 ): Promise<CliResult> {
@@ -138,6 +142,7 @@ export async function main(
   }
   if (cmd === "service") return serviceCommand(ctx, rest);
   if (cmd === "stop") return stopCommand(ctx, rest);
+  if (cmd === "app") return appCommand(ctx);
   if (cmd === "log") return logCommand(ctx, rest);
   if (cmd === "models") return modelsCommand(ctx, rest);
   if (cmd === "bots") return botsCommand(ctx, rest);

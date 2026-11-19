@@ -98,6 +98,7 @@ export async function serviceCommand(ctx: Ctx, args: string[]): Promise<CliResul
           `Covo's service is running (process ${h.pid}, ${h.rssMB} MB memory).`,
           `  Tasks      ${h.running} running, ${h.queued} waiting`,
           `  Socket     ${tildify(socketPath(ctx.home))}`,
+          `  App        covo app (opens http://127.0.0.1:${ctx.env.COVO_PORT ?? 7420}/ui/)`,
           `  At login   ${installed ? "starts automatically" : "no (covo service install)"}`,
         ]
       : [
@@ -196,4 +197,21 @@ export async function stopCommand(ctx: Ctx, args: string[]): Promise<CliResult> 
   return (await stopViaService(ctx.home, id))
     ? { code: 0, out: "Stopping after the current step. Its copy is thrown away; your files are untouched.\n" }
     : { code: 1, out: `No running task matches "${id}". See: covo status\n` };
+}
+
+/** covo app: opens Covo in your browser, signed in with a one-time code. */
+export async function appCommand(ctx: Ctx): Promise<CliResult> {
+  if (!(await serviceHealth(ctx.home)))
+    return { code: 1, out: "Covo's service isn't running. Start it with: covo service install\n" };
+  let link: { code?: string; url?: string; error?: string };
+  try {
+    const r = await fetch("http://covod/pair-code", { unix: socketPath(ctx.home), method: "POST" });
+    link = (await r.json()) as typeof link;
+  } catch (e) {
+    return { code: 1, out: `Couldn't reach Covo's service: ${(e as Error).message}\n` };
+  }
+  if (!link.url) return { code: 1, out: `${link.error ?? "The service didn't give a sign-in link."}\n` };
+  const open = ctx.openUrl ?? ((u: string) => Bun.spawnSync(["/usr/bin/open", u]).exitCode === 0);
+  if (!open(link.url)) return { code: 1, out: "Couldn't open your browser. Run covo app again to get a new link.\n" };
+  return { code: 0, out: "Opened Covo in your browser. The sign-in link works once, for 2 minutes.\n" };
 }

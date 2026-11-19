@@ -1,12 +1,16 @@
 import { chmodSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
+import { API_PORT } from "@covo/api";
 import { covoPaths, VERSION } from "@covo/core";
 import { openDb } from "@covo/db";
 import { RunError, type RunEvent, type RunSummary, recoverStaleRuns, startRun } from "@covo/engine";
 import { currentCapacity } from "../commands/profile.ts";
 import type { Ctx } from "../main.ts";
 import { type Prepared, PrepareError, prepareRun, type RunHeader, type RunRequest } from "../runner.ts";
+import { json as apiJson, handleApi } from "./api.ts";
 import { serviceHealth, socketPath } from "./client.ts";
+import { apiToken, Gate } from "./gate.ts";
+import { CSP, UI_HTML, UI_JS } from "./ui.ts";
 
 // covod, Covo's background service (Phase 3 M0). One process runs every bot task, so a task
 // carries on after the terminal closes, and the app, phone and schedules (later milestones) can
@@ -242,6 +246,10 @@ function ndjson(attach: (send: (m: ServiceMessage) => void, close: () => void) =
 export interface Running {
   service: Service;
   socket: string;
+  /** The local API's port, or null if it couldn't open one (another program has it). */
+  port: number | null;
+  portError?: string;
+  gate: Gate;
   recovered: string[];
   close(): Promise<void>;
 }
@@ -260,6 +268,62 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
   }
   const recovered = recoverStaleRuns(ctx.home, { now: ctx.now });
   const service = new Service(ctx, o);
+  const wanted = ctx.env.COVO_PORT !== undefined ? Number(ctx.env.COVO_PORT) : API_PORT;
+  const gate = new Gate(apiToken(ctx.home), wanted, ctx.now);
+
+  // The local API for the app: 127.0.0.1 only, and every request passes the gate (gate.ts).
+  let http: ReturnType<typeof Bun.serve> | undefined;
+  let portError: string | undefined;
+  try {
+    http = Bun.serve({
+      hostname: "127.0.0.1",
+      port: wanted,
+      async fetch(req) {
+        const refused = gate.checkPlace(req);
+        if (refused && !refused.ok) return apiJson({ error: refused.error }, refused.status);
+        const path = new URL(req.url).pathname;
+        if (path === "/" || path === "/ui") return new Response(null, { status: 302, headers: { location: "/ui/" } });
+        if (req.method === "GET" && path === "/ui/")
+          return new Response(UI_HTML, {
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              "content-security-policy": CSP,
+              "cache-control": "no-store",
+              "x-frame-options": "DENY",
+            },
+          });
+        if (req.method === "GET" && path === "/ui/app.js")
+          return new Response(UI_JS, {
+            headers: {
+              "content-type": "text/javascript; charset=utf-8",
+              "cache-control": "no-store",
+              "x-content-type-options": "nosniff",
+            },
+          });
+        if (req.method === "POST" && path === "/api/pair") {
+          if (!(req.headers.get("content-type") ?? "").startsWith("application/json"))
+            return apiJson({ error: "Send JSON." }, 415);
+          let code: unknown;
+          try {
+            code = ((await req.json()) as { code?: unknown }).code;
+          } catch {}
+          const cookie = gate.pair(code);
+          return cookie
+            ? apiJson({ ok: true }, 200, { "set-cookie": cookie })
+            : apiJson({ error: "That sign-in code has expired or was already used. Run: covo app" }, 401);
+        }
+        if (path.startsWith("/api/")) {
+          const v = gate.checkAuth(req);
+          if (!v.ok) return apiJson({ error: v.error }, v.status);
+          return handleApi(ctx, service, gate, req, v.by);
+        }
+        return apiJson({ error: "Not found." }, 404);
+      },
+    });
+    gate.setPort(http.port as number);
+  } catch (e) {
+    portError = (e as Error).message;
+  }
 
   const server = Bun.serve({
     unix: socket,
@@ -313,6 +377,12 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
           : json({ error: "No such task is running." }, 404);
       }
       if (req.method === "GET" && path === "/events") return ndjson((send) => service.watch(send));
+      if (req.method === "POST" && path === "/pair-code") {
+        // Only over the private socket: whoever can open it is you.
+        if (!http) return json({ error: `The app's port isn't open: ${portError}` }, 503);
+        const code = gate.newCode();
+        return json({ code, url: `http://127.0.0.1:${http.port}/ui/#code=${code}` });
+      }
       return json({ error: "Not found." }, 404);
     },
   });
@@ -320,10 +390,14 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
   return {
     service,
     socket,
+    port: http ? (http.port as number) : null,
+    ...(portError ? { portError } : {}),
+    gate,
     recovered,
     async close() {
       await service.shutdown();
       server.stop(true);
+      http?.stop(true);
       rmSync(socket, { force: true });
     },
   };

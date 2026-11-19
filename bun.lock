@@ -17,6 +17,7 @@
         "covo": "./src/index.ts",
       },
       "dependencies": {
+        "@covo/api": "workspace:*",
         "@covo/core": "workspace:*",
         "@covo/db": "workspace:*",
         "@covo/engine": "workspace:*",
@@ -24,6 +25,10 @@
         "@covo/platform": "workspace:*",
         "@covo/sandbox": "workspace:*",
       },
+    },
+    "packages/api": {
+      "name": "@covo/api",
+      "version": "0.0.1",
     },
     "packages/core": {
       "name": "@covo/core",
@@ -94,6 +99,8 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.6.8", "", { "os": "win32", "cpu": "arm64" }, "sha512-ezjCEZzHIWE2pdh83a7zLVcAAcDaERcTcvfA7uWlxqz/1CuDxgtfO19pDg9B6YY4wKYIDvYBw2QCMnqIshSwmw=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.6.8", "", { "os": "win32", "cpu": "x64" }, "sha512-cD6HvGczZUiAYsY8s2TxxXj2AHFzEdMomvVJfEjzOjBM45nGqIDfBpbtvwGQzDCN8X2yKKk9u1jnDZisT2nxIg=="],
+
+    "@covo/api": ["@covo/api@workspace:packages/api"],
 
     "@covo/cli": ["@covo/cli@workspace:apps/cli"],
 
