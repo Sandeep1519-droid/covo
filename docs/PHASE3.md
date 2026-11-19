@@ -1,6 +1,6 @@
 # Phase 3 Plan: The App and Your Phone
 
-> Status: **in progress** (M0–M2 done), 19 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
+> Status: **in progress** (M0–M3 done), 19 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
 
 ## 1. Goal
 
@@ -54,7 +54,31 @@ Covo stays local. Nothing listens beyond your own Mac, and every request to the 
 - **Waiting for later milestones:** New bot, search, sections, attach, voice, Computer, Details and Share. Each shows "Arrives in a later update".
 - **Service:** serves `apps/app/dist` with a strict content policy, and can't serve files outside that folder (tested). Before the app is built, the page explains how to build it. Live-update keep-alives now go every 5 s (Bun drops connections idle for 10 s).
 - **Verified live:** your service shows your bot and its past task; a throwaway copy with five sample bots matched the H2 screen in both themes; a message started a task, which showed Working and then Stopped live; no console errors) | 4 days |
-| **M3** | **Chat and cards.** Each bot has its own chat. A message becomes a task; recent messages go along as context (new tables `conversations` and `messages`). Steps stream in live. Cards:<br>• **File changes**, with a diff viewer and Keep, Discard or Undo<br>• **Spending pause**, with Approve and Deny<br>• **Failed or stopped**, with the reason<br>• **Needs you**, an inbox of everything waiting<br>Screens: New bot (avatar shape and colour, name, purpose, model, level), Models (add a key in a hidden field that goes straight to the Keychain), Limits, Power profile. | Create a bot in the app, give it a task, undo it, approve a spending pause; all of it shows in `covo audit verify` | 6–7 days |
+| **M3** | **Chat and cards.** Each bot has its own chat. A message becomes a task; recent messages go along as context (new tables `conversations` and `messages`). Steps stream in live. Cards:<br>• **File changes**, with a diff viewer and Keep, Discard or Undo<br>• **Spending pause**, with Approve and Deny<br>• **Failed or stopped**, with the reason<br>• **Needs you**, an inbox of everything waiting<br>Screens: New bot (avatar shape and colour, name, purpose, model, level), Models (add a key in a hidden field that goes straight to the Keychain), Limits, Power profile. | Create a bot in the app, give it a task, undo it, approve a spending pause; all of it shows in `covo audit verify` (done:
+- **Chat:** migration 0006 adds `conversations` and `messages`. Only your words are stored; the bot's reply is the task itself (state, summary, changes). A new message carries up to 6 earlier turns (3,000 characters) as context, marked as background so it isn't taken as the task. A message that can't start keeps the reason, and Try again re-sends it.
+- **Cards, from the Figma R screens:**
+  - **Files changed (R3):** Review, Keep all and Discard while in review. A kept task gets See changes and Undo. Diffs of kept tasks come from the undo copies (new `GET /api/runs/:id/changes`).
+  - **Spending pause (R8):** Allow, Change limits and Stop. The answer is tied to the exact request.
+  - **Stopped or failed (R7):** with model, spent and time.
+  - **Live steps:** shown while a task runs, with Stop.
+- **Screens:**
+  - **Review changes (R4):** a diff viewer, a switch per file and Keep selected.
+  - **Needs you (H6):** approvals and reviews from every bot.
+  - **New bot (B1):** 18 colours, 12 shapes, name, purpose, model and level. Suggestions fill the form.
+  - **Settings window (S1, S2, S6, S7):**
+    - General: theme, sign out.
+    - AI models and keys: add a key that goes straight to the Keychain, make default, remove.
+    - Spending: today, 30 days, top spender, a 14-day chart and editable limits.
+    - Computer: power profile, Covo's memory use and the activity-log check.
+- **API:** `GET/POST /api/bots/:id/messages`, `GET /api/runs/:id/changes`, `GET /api/providers`. Bots take `shape` and `color`. Approvals include their spending details.
+- **Verified live** on a throwaway service with a scripted model:
+  - created a bot from a suggestion and gave it a task;
+  - reviewed the diff, kept it, then undid it (README back as it was);
+  - approved a spending pause, recorded as "you (app)";
+  - added a model with a test key;
+  - `covo audit verify` passed;
+  - both themes checked, no console errors.
+- **Not yet:** tasks started from the terminal don't appear in a chat (only in Needs you and Review). The Claude subscription is still connected from the terminal. "Always allow", Touch ID and "Stop for today" wait for Phase 4) | 6–7 days |
 | **M4** | **The Mac app.** `Covo.app` in SwiftUI:<br>• a **menu bar icon**: idle, working, or a count of things waiting for you<br>• **quick actions**: open Covo, pause all bots, the latest approval<br>• a **window** that shows the chat app (WKWebView, the system's own web engine; no copy of Chrome)<br>• **macOS notifications** when something needs you<br>• it **starts the service** if it isn't running.<br>Signed with your free Apple ID. | Quit Terminal; the menu bar shows "1 needs you" → click → approve | 4 days |
 | **M5** | **Your phone (Telegram).** Run `covo phone connect`. You create a bot with @BotFather and paste its token, which goes to the Keychain. Then you send the pairing code from your phone. Covo checks Telegram for messages itself (long polling), so no server or public address is needed.<br>• **Messages:** a task finished (short summary), approval cards with **Approve and Deny buttons** tied to that exact request and expiring, and failures.<br>• **Accepted only from your paired chat.** The phone can approve spending pauses. Raising limits or levels stays on the Mac until Touch ID arrives in Phase 4.<br>• **Optional:** start a task by messaging the bot (off by default). | Your phone gets a spending pause → tap Approve → the run continues; a message from another Telegram account is ignored and logged | 4 days |
 | **M6** | **Routines and the daily summary.** Commands: `covo routines add "Inbox tidy" --bot <name> --every "weekdays 9:00" "<task>"`, plus `list`, `pause` and `remove`, and the same in the app. The service runs them on time, and a run missed while the Mac slept happens once when it wakes (or is skipped, your choice). Quiet hours, and no new routine runs when memory is critically low (power profile). A daily summary at a time you pick, in the app and on your phone, covers what ran, what changed (with Undo), what was spent and what's waiting. | A routine set for 2 minutes from now runs by itself; the daily summary lists it | 3–4 days |

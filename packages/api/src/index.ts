@@ -91,6 +91,58 @@ export interface NewBotRequest {
   models?: string[];
   level?: Level;
   taskLimitUsd?: number | null;
+  shape?: AvatarShape;
+  color?: AvatarColor;
+}
+
+/** A message in a bot's chat (Phase 3 M3). Your messages start tasks; `runId` is that task. */
+export interface ApiChatMessage {
+  id: string;
+  role: "you" | "bot";
+  text: string;
+  runId: string | null;
+  model: string | null;
+  /** Why the task couldn't start. */
+  error: string | null;
+  createdAt: number;
+}
+
+/** GET /api/bots/:id/messages, POST /api/bots/:id/messages { text, model? } */
+export interface NewMessageRequest {
+  text: string;
+  model?: string;
+}
+
+/** A file a task changed, with a line diff when both sides are text. */
+export interface ApiFileChange {
+  path: string;
+  kind: "added" | "modified" | "deleted";
+  hunks?: { header: string; lines: string[] }[];
+  /** Why there's no diff: "binary", "too large", "symlink", "undone", "changed since". */
+  note?: string;
+  /** You changed this file after the task started; keeping it will be refused. */
+  workspaceChanged: boolean;
+}
+
+/** GET /api/runs/:id/changes: changes waiting for review, or what a kept task changed. */
+export interface ApiChanges {
+  runId: string;
+  state: RunState;
+  files: ApiFileChange[];
+  added: number;
+  modified: number;
+  deleted: number;
+}
+
+/** GET /api/providers: the AI services you can connect. */
+export interface ApiProvider {
+  id: string;
+  label: string;
+  local: boolean;
+  needsKey: boolean;
+  models: string[];
+  keyUrl?: string;
+  note?: string;
 }
 
 /** PATCH /api/bots/:id */
@@ -179,6 +231,8 @@ export interface ApiApproval {
   /** Send it back with the answer: an approval only applies to this exact request. */
   payloadHash: string;
   expiresAt: number;
+  /** For spending pauses: what was spent, the next step's estimate, and what approving allows. */
+  spend?: { spentUsd: number; estimateUsd: number; grantUsd: number; overDay: boolean; dayUsd: number | null };
 }
 
 /** POST /api/approvals/:id */

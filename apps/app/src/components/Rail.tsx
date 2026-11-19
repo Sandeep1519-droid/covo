@@ -27,7 +27,12 @@ export function Rail({ view, waiting, go }: { view: View; waiting: number; go: (
       {item(view.name === "library", "Library", () => go({ name: "library" }), <Icon name="book" />)}
       {item(view.name === "more", "More", () => go({ name: "more" }), <Icon name="more" />)}
       <span className="grow" />
-      {item(view.name === "settings", "Settings", () => go({ name: "settings" }), <Icon name="sliders" />)}
+      {item(
+        view.name === "settings",
+        "Settings",
+        () => go({ name: "settings", tab: "general" }),
+        <Icon name="sliders" />,
+      )}
     </nav>
   );
 }

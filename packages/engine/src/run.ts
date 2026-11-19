@@ -17,7 +17,7 @@ import { CowWorkspaces, type DiffSummary } from "@covo/sandbox";
 import { type AskApproval, Budget, type SpendLimits, type SpendRequest } from "./budget.ts";
 import { type Engine, engineInstructions } from "./engines.ts";
 import { DEFAULT_LIMITS, type LoopLimits, type LoopOutcome, type ModelTurn, runLoop } from "./loop.ts";
-import { systemPrompt, taskMessage } from "./prompt.ts";
+import { contextBlock, systemPrompt, taskMessage } from "./prompt.ts";
 import { type KeepOutcome, keepChanges } from "./review.ts";
 import { type RunState, recordState } from "./state.ts";
 import { runTool, TOOL_SPECS } from "./tools.ts";
@@ -76,6 +76,8 @@ export const ENGINE_TIMEOUT_MS = 20 * 60_000;
 export interface StartRunOptions {
   home: string;
   goal: string;
+  /** Earlier chat turns (Phase 3 M3), sent with the task as background. Not saved as the goal. */
+  context?: string;
   /** One model… */
   provider?: ModelProvider;
   /**
@@ -298,7 +300,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       const r = await en.engine.run({
         ws,
         tmp,
-        goal: o.goal,
+        goal: o.context ? `${contextBlock(o.context)}Task: ${o.goal}` : o.goal,
         instructions: engineInstructions(agent.name, agent.purpose),
         sandbox: sb,
         home: o.userHome ?? homedir(),
@@ -380,7 +382,10 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
 
     const initial: ChatMessage[] = [
       { role: "system", content: systemPrompt(agent.name, agent.purpose) },
-      { role: "user", content: `${taskMessage(o.goal, listing(ws))}${handoff ? `\n\nNote: ${handoff}` : ""}` },
+      {
+        role: "user",
+        content: `${taskMessage(o.goal, listing(ws), o.context)}${handoff ? `\n\nNote: ${handoff}` : ""}`,
+      },
     ];
     const budget = new Budget({
       db,

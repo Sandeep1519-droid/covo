@@ -38,6 +38,10 @@
   --color-status-warning-subtle: #fdf2e1;
   --color-status-danger: #d92d2d;
   --color-status-danger-subtle: #fdecec;
+  --color-status-success: #15a050;
+  --color-status-success-subtle: #e6f6ec;
+  --color-border-strong: #c3c3cb;
+  --space-32: 32px;
 }
 
 :root[data-theme="dark"] {
@@ -65,6 +69,8 @@
   --color-status-warning-subtle: #3a2b12;
   --color-status-danger: #e5534b;
   --color-status-danger-subtle: #3d1a1f;
+  --color-status-success: #3fb984;
+  --color-status-success-subtle: #14301f;
 }
 
 /* Text styles */
@@ -104,4 +110,16 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 16px;
+}
+.t-overline {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.06em; /* Figma: 6% */
+  text-transform: uppercase;
+}
+.t-mono-s {
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 18px;
 }

@@ -11,21 +11,61 @@ export interface Data {
   usage: ApiUsage;
 }
 
+export type SettingsTab = "general" | "models" | "spending" | "computer";
+export const SETTINGS_TABS: SettingsTab[] = ["general", "models", "spending", "computer"];
+
 export type View =
   | { name: "bot"; id: string }
+  | { name: "review"; runId: string }
+  | { name: "new-bot" }
   | { name: "needs-you" }
   | { name: "library" }
   | { name: "more" }
-  | { name: "settings" };
+  | { name: "settings"; tab: SettingsTab };
 
 export function viewFromHash(hash: string): View | null {
   const [, a, id] = hash.replace(/^#/, "").split("/");
-  if (a === "bot" && id) return { name: "bot", id: decodeURIComponent(id) };
-  if (a === "needs-you" || a === "library" || a === "more" || a === "settings") return { name: a };
+  const arg = id ? decodeURIComponent(id) : "";
+  if (a === "bot" && arg) return { name: "bot", id: arg };
+  if (a === "review" && arg) return { name: "review", runId: arg };
+  if (a === "settings")
+    return { name: "settings", tab: (SETTINGS_TABS as string[]).includes(arg) ? (arg as SettingsTab) : "general" };
+  if (a === "new-bot" || a === "needs-you" || a === "library" || a === "more") return { name: a };
   return null;
 }
 
-export const hashFor = (v: View) => (v.name === "bot" ? `#/bot/${encodeURIComponent(v.id)}` : `#/${v.name}`);
+export function hashFor(v: View): string {
+  if (v.name === "bot") return `#/bot/${encodeURIComponent(v.id)}`;
+  if (v.name === "review") return `#/review/${encodeURIComponent(v.runId)}`;
+  if (v.name === "settings") return `#/settings/${v.tab}`;
+  return `#/${v.name}`;
+}
+
+/** A step a task took, as it streams in. */
+export interface LiveStep {
+  seq: number;
+  name: string;
+  target: string;
+  label: string;
+  ok: boolean;
+  blocked?: string;
+}
+
+const VERB: Record<string, string> = {
+  list_files: "Looked in",
+  read_file: "Read",
+  write_file: "Wrote",
+  edit_file: "Edited",
+  run_command: "Ran",
+  search_files: "Searched",
+  finish: "Finished",
+};
+export const stepText = (s: LiveStep) =>
+  s.blocked
+    ? `Blocked: ${s.name} ${s.target} (${s.blocked === "path" ? "outside the workspace" : "by the sandbox"})`
+    : `${VERB[s.name] ?? s.name} ${s.target}`.trim();
+
+export const runById = (d: Data, id: string | null) => (id ? d.runs.find((r) => r.id === id) : undefined);
 
 export const MAIN_BOT = "bot_assistant";
 

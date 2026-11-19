@@ -29,6 +29,8 @@ import type { Ctx } from "./main.ts";
 
 export interface RunRequest {
   goal: string;
+  /** Earlier chat turns, sent as background (the app's chat). */
+  context?: string;
   bot?: string;
   model?: string;
   trigger?: string;
@@ -121,6 +123,7 @@ export async function prepareRun(ctx: Ctx, req: RunRequest): Promise<Prepared> {
     options: {
       home: ctx.home,
       goal: req.goal,
+      ...(req.context ? { context: req.context } : {}),
       ...(req.trigger ? { trigger: req.trigger } : {}),
       ...(bot ? { agentId: bot.id } : {}),
       ...(chain ? { chain } : { provider: first.provider as ModelProvider }),

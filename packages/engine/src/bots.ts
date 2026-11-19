@@ -128,6 +128,18 @@ export interface NewBot {
   level?: Level;
   taskLimitUsd?: number | null;
   departmentId?: string;
+  /** One of AVATAR_SHAPES and AVATAR_COLORS; picked at random when left out. */
+  shape?: string;
+  color?: string;
+}
+
+function checkShape(s: string): string {
+  if (!SHAPES.includes(s)) throw new RunError(`Shape must be one of: ${SHAPES.join(", ")}.`);
+  return s;
+}
+function checkColor(c: string): string {
+  if (!COLORS.includes(c)) throw new RunError(`Colour must be one of: ${COLORS.join(", ")}.`);
+  return c;
 }
 
 export function createBot(home: string, b: NewBot, now: () => number = Date.now): Bot {
@@ -153,8 +165,8 @@ export function createBot(home: string, b: NewBot, now: () => number = Date.now)
         id,
         dept,
         name,
-        pick(SHAPES),
-        pick(COLORS),
+        b.shape === undefined ? pick(SHAPES) : checkShape(b.shape),
+        b.color === undefined ? pick(COLORS) : checkColor(b.color),
         b.purpose?.trim() ?? "",
         JSON.stringify(models),
         level,
@@ -178,6 +190,8 @@ export interface BotChanges {
   level?: Level;
   /** Dollars per task; null = use the general limit. */
   taskLimitUsd?: number | null;
+  shape?: string;
+  color?: string;
 }
 
 export function updateBot(home: string, nameOrId: string, c: BotChanges, now: () => number = Date.now): Bot {
@@ -197,6 +211,16 @@ export function updateBot(home: string, nameOrId: string, c: BotChanges, now: ()
       sets.push("name = ?");
       vals.push(name);
       changed.name = name;
+    }
+    if (c.shape !== undefined) {
+      sets.push("avatar_shape = ?");
+      vals.push(checkShape(c.shape));
+      changed.shape = c.shape;
+    }
+    if (c.color !== undefined) {
+      sets.push("avatar_color = ?");
+      vals.push(checkColor(c.color));
+      changed.color = c.color;
     }
     if (c.purpose !== undefined) {
       sets.push("purpose = ?");

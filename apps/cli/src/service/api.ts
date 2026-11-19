@@ -3,10 +3,12 @@ import { userInfo } from "node:os";
 import type {
   ApiApproval,
   ApiBot,
+  ApiChatMessage,
   ApiLimits,
   ApiMe,
   ApiModel,
   ApiProfile,
+  ApiProvider,
   ApiRun,
   ApiRunDetail,
   ApiStep,
@@ -16,13 +18,19 @@ import type {
 import { covoPaths, VERSION } from "@covo/core";
 import { openDb, verifyAudit } from "@covo/db";
 import {
+  addMessage,
   archiveBot,
   type Bot,
+  type ChatMessage,
+  changesOf,
   createBot,
   decide,
   discardRun,
+  failMessage,
   keepRun,
+  linkRun,
   listBots,
+  listMessages,
   RunError,
   reviewRun,
   startOfLocalDay,
@@ -37,6 +45,7 @@ import {
   loadSettings,
   ModelConfigError,
   modelConfig,
+  PRESETS,
   presetById,
   removeConnection,
   setDefault,
@@ -277,24 +286,97 @@ async function addModel(ctx: Ctx, b: Record<string, unknown>): Promise<ApiModel>
   return out;
 }
 
+const toMessage = (m: ChatMessage): ApiChatMessage => ({
+  id: m.id,
+  role: m.role,
+  text: m.text,
+  runId: m.runId,
+  model: m.model,
+  error: m.error,
+  createdAt: m.createdAt,
+});
+
+/**
+ * Saves your message and starts its task with the last few turns as context. If the task can't
+ * start (no model, Covo shutting down), the message keeps the reason, so the chat can show it.
+ */
+async function sendMessage(
+  ctx: Ctx,
+  service: Service,
+  bot: string,
+  b: Record<string, unknown>,
+  by: "token" | "session",
+): Promise<ApiChatMessage> {
+  if (typeof b.text !== "string" || !b.text.trim()) throw new HttpError(400, "Write a message first.");
+  const model = typeof b.model === "string" && b.model ? b.model : undefined;
+  const {
+    message,
+    bot: found,
+    context,
+  } = addMessage(ctx.home, bot, b.text, { now: ctx.now, ...(model ? { model } : {}) });
+  try {
+    const job = await service.submit({
+      goal: message.text,
+      bot: found.id,
+      ...(model ? { model } : {}),
+      ...(context ? { context } : {}),
+      trigger: by === "session" ? "chat" : "api",
+    });
+    job.listeners.add((msg: ServiceMessage) => {
+      if (msg.type === "event" && msg.event.type === "state") linkRun(ctx.home, message.id, msg.event.runId, ctx.now);
+      else if (msg.type === "error") failMessage(ctx.home, message.id, msg.message, ctx.now);
+    });
+    service.start(job);
+    return toMessage(message);
+  } catch (e) {
+    if (!(e instanceof PrepareError || e instanceof ModelConfigError || e instanceof SecretError)) throw e;
+    failMessage(ctx.home, message.id, e.message, ctx.now);
+    return toMessage({ ...message, error: e.message });
+  }
+}
+
 function approvals(ctx: Ctx): ApiApproval[] {
   return withDb(ctx, (db) =>
     db
       .query<
-        { id: string; run_id: string; kind: string; summary: string; payload_hash: string; expires_at: number },
+        {
+          id: string;
+          run_id: string;
+          kind: string;
+          summary: string;
+          payload_json: string;
+          payload_hash: string;
+          expires_at: number;
+        },
         []
       >(
-        "SELECT id, run_id, kind, summary, payload_hash, expires_at FROM approvals WHERE status = 'pending' ORDER BY rowid",
+        "SELECT id, run_id, kind, summary, payload_json, payload_hash, expires_at FROM approvals WHERE status = 'pending' ORDER BY rowid",
       )
       .all()
-      .map((a) => ({
-        id: a.id,
-        runId: a.run_id,
-        kind: a.kind,
-        summary: a.summary,
-        payloadHash: a.payload_hash,
-        expiresAt: a.expires_at,
-      })),
+      .map((a): ApiApproval => {
+        const out: ApiApproval = {
+          id: a.id,
+          runId: a.run_id,
+          kind: a.kind,
+          summary: a.summary,
+          payloadHash: a.payload_hash,
+          expiresAt: a.expires_at,
+        };
+        if (a.kind === "spend") {
+          try {
+            const p = JSON.parse(a.payload_json) as Record<string, unknown>;
+            const n = (k: string) => (typeof p[k] === "number" ? (p[k] as number) : 0);
+            out.spend = {
+              spentUsd: n("spentUsd"),
+              estimateUsd: n("estimateUsd"),
+              grantUsd: n("grantUsd"),
+              overDay: p.overDay === true,
+              dayUsd: typeof p.day === "number" ? p.day : null,
+            };
+          } catch {}
+        }
+        return out;
+      }),
   );
 }
 
@@ -396,8 +478,16 @@ export async function handleApi(
         const b = await body<Record<string, unknown>>(req);
         return json(toBot(createBot(ctx.home, b as never, ctx.now)), 201);
       }
-      if (m === "PATCH" && id) return json(toBot(updateBot(ctx.home, id, (await body(req)) as never, ctx.now)));
-      if (m === "DELETE" && id) return json(toBot(archiveBot(ctx.home, id, ctx.now)));
+      if (m === "PATCH" && id && !action)
+        return json(toBot(updateBot(ctx.home, id, (await body(req)) as never, ctx.now)));
+      if (id && action === "messages") {
+        if (m === "GET") {
+          const limit = Number(url.searchParams.get("limit") ?? 100) || 100;
+          return json(listMessages(ctx.home, id, { limit, now: ctx.now }).map(toMessage));
+        }
+        if (m === "POST") return json(await sendMessage(ctx, service, id, await body(req), by), 201);
+      }
+      if (m === "DELETE" && id && !action) return json(toBot(archiveBot(ctx.home, id, ctx.now)));
     }
 
     // Models (keys go in, never out)
@@ -412,6 +502,22 @@ export async function handleApi(
         await removeConnection(ctx.home, ctx.secrets ?? secrets(), id);
         return json(models(ctx));
       }
+    }
+
+    if (a === "providers" && m === "GET" && !id) {
+      return json(
+        PRESETS.map(
+          (p): ApiProvider => ({
+            id: p.id,
+            label: p.label,
+            local: p.local === true,
+            needsKey: p.local !== true,
+            models: p.models,
+            ...(p.keyUrl ? { keyUrl: p.keyUrl } : {}),
+            ...(p.note ? { note: p.note } : {}),
+          }),
+        ),
+      );
     }
 
     // Runs
@@ -479,6 +585,7 @@ export async function handleApi(
           return json(detail);
         }
         if (m === "GET" && action === "review") return json(reviewRun(ctx.home, runId, ctx.now));
+        if (m === "GET" && action === "changes") return json(changesOf(ctx.home, runId, ctx.now));
         if (m === "POST" && action === "keep") {
           const b = await body<{ only?: unknown }>(req);
           const only = Array.isArray(b.only) ? b.only.filter((x): x is string => typeof x === "string") : undefined;

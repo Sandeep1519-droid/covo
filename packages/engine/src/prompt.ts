@@ -14,6 +14,11 @@ export function systemPrompt(botName: string, purpose: string): string {
   ].join("\n");
 }
 
-export function taskMessage(goal: string, listing: string): string {
-  return `Task: ${goal}\n\nWorkspace contents:\n${listing}`;
+/** Earlier chat turns, marked so the model treats them as background, not as the task. */
+export function contextBlock(context: string): string {
+  return `Earlier in this chat (background only; do just the task below):\n${context}\n\n`;
+}
+
+export function taskMessage(goal: string, listing: string, context?: string): string {
+  return `${context ? contextBlock(context) : ""}Task: ${goal}\n\nWorkspace contents:\n${listing}`;
 }

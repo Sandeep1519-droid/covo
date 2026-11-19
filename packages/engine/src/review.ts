@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { covoPaths } from "@covo/core";
 import { appendAudit, migrate, openDb } from "@covo/db";
@@ -8,8 +8,11 @@ import {
   type Change,
   type Conflict,
   CowWorkspaces,
+  fingerprint,
   type Hunk,
   pruneUndo,
+  readUndo,
+  savedPath,
   type UndoConflict,
   UndoError,
   unifiedDiff,
@@ -234,6 +237,47 @@ export function keepChanges(
   cow.dropCopy(runId);
   pruneUndo(cow.runsRoot, now(), UNDO_MAX_AGE_MS, UNDO_MAX_BYTES);
   return { runId, kept, dropped, conflicts: [] };
+}
+
+/**
+ * What a run changed, for the app's file-changes card: the waiting changes of a run in review, or
+ * what a kept run put in your workspace (diffed against the old versions undo saved). A file you've
+ * changed since is listed without a diff. Other runs changed nothing in your workspace.
+ */
+export function changesOf(home: string, runId: string, now: () => number = Date.now): Review {
+  const reviewing = withRun(home, runId, now, (_db, run) => run.state === "REVIEWING");
+  if (reviewing) return reviewRun(home, runId, now);
+  return withRun(home, runId, now, (_db, run, cow) => {
+    const files: FileReview[] = [];
+    const n = { added: 0, modified: 0, deleted: 0 };
+    const rec = run.state === "KEPT" || run.state === "ROLLED_BACK" ? readUndo(cow.runDir(runId)) : null;
+    for (const e of rec?.entries ?? []) {
+      if (e.entry === "dir") continue;
+      n[e.kind]++;
+      const f: FileReview = { path: e.path, kind: e.kind, workspaceChanged: false };
+      const current = join(rec?.workspace ?? "", e.path);
+      if (run.state === "ROLLED_BACK" || rec?.undoneAt) f.note = "undone";
+      else if (e.entry === "symlink") f.note = "symlink";
+      else if (e.kind !== "deleted" && fingerprint(current) !== e.keptPrint) {
+        f.note = "changed since";
+        f.workspaceChanged = true;
+      } else {
+        const before = e.saved ? readCapped(savedPath(cow.runDir(runId), e.path)) : Buffer.alloc(0);
+        const after = e.kind === "deleted" ? Buffer.alloc(0) : readCapped(current);
+        if (before === null || after === null) f.note = "too large";
+        else if (!isText(before) || !isText(after)) f.note = "binary";
+        else f.hunks = unifiedDiff(before.toString("utf8"), after.toString("utf8"));
+      }
+      files.push(f);
+    }
+    return { runId, state: run.state, goal: run.goal, summary: run.summary, files, ...n };
+  });
+}
+
+function readCapped(p: string): Buffer | null {
+  if (!existsSync(p)) return Buffer.alloc(0);
+  if (statSync(p).size > MAX_DIFF_BYTES) return null;
+  return readFileSync(p);
 }
 
 export interface UndoOutcome {

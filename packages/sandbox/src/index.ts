@@ -9,4 +9,4 @@ export { checkSandbox } from "./sandbox-check.ts";
 export type { Hunk, Op } from "./textdiff.ts";
 export { diffLines, unifiedDiff } from "./textdiff.ts";
 export type { UndoConflict, UndoEntry, UndoRecord, UndoResult } from "./undo.ts";
-export { applyUndo, pruneUndo, readUndo, UndoError } from "./undo.ts";
+export { applyUndo, fingerprint, pruneUndo, readUndo, savedPath, UndoError } from "./undo.ts";

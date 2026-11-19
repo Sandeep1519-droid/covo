@@ -2,6 +2,8 @@ export type { ApprovalStreak, Bot, BotChanges, Level, NewBot } from "./bots.ts";
 export { approvalStreak, archiveBot, createBot, findBot, LEVELS, listBots, updateBot } from "./bots.ts";
 export type { AskApproval, SpendLimits, SpendRequest } from "./budget.ts";
 export { Budget, decide, startOfLocalDay, usd } from "./budget.ts";
+export type { ChatMessage, NewMessage } from "./chat.ts";
+export { addMessage, CONTEXT_TURNS, failMessage, linkRun, listMessages } from "./chat.ts";
 export type { Engine, EngineResult, EngineTask } from "./engines.ts";
 export {
   CLAUDE_CODE_TOOLS,
@@ -17,10 +19,19 @@ export type { LoopHooks, LoopInput, LoopLimits, LoopOutcome, LoopResult, ModelTu
 export { DEFAULT_LIMITS, NUDGE, runLoop } from "./loop.ts";
 export type { Capacity, LocalModel, Profile, ProfileName } from "./profile.ts";
 export { capacity, PROFILES, paramsOf, profileForMemory, suggestLocalModel } from "./profile.ts";
-export { systemPrompt, taskMessage } from "./prompt.ts";
+export { contextBlock, systemPrompt, taskMessage } from "./prompt.ts";
 export { processAlive, recoverStaleRuns } from "./recover.ts";
 export type { FileReview, KeepOutcome, Review, UndoOutcome } from "./review.ts";
-export { discardRun, keepChanges, keepRun, reviewRun, UNDO_MAX_AGE_MS, UNDO_MAX_BYTES, undoRun } from "./review.ts";
+export {
+  changesOf,
+  discardRun,
+  keepChanges,
+  keepRun,
+  reviewRun,
+  UNDO_MAX_AGE_MS,
+  UNDO_MAX_BYTES,
+  undoRun,
+} from "./review.ts";
 export type { EngineEntry, RunChainEntry, RunEvent, RunSummary, StartRunOptions } from "./run.ts";
 export { ENGINE_TIMEOUT_MS, isEngineEntry, RunError, startRun } from "./run.ts";
 export type { RunState } from "./state.ts";

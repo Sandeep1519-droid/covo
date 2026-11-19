@@ -70,6 +70,12 @@ function printOf(p: string): string | null {
   return "dir";
 }
 
+/** What's at a path now, as undo compares it: file hash, symlink target, "dir", or null. */
+export const fingerprint = printOf;
+
+/** Where the old version of a kept file was saved, if it was. */
+export const savedPath = (runDir: string, path: string) => join(runDir, UNDO, "files", path);
+
 /** Saves what `changes` will replace in `workspace`, before they are applied. */
 export function saveUndo(
   runDir: string,

@@ -2,6 +2,7 @@ import type { ApiBot } from "@covo/api";
 import { approvalsOf, botLine, type Data, MAIN_BOT, runsOf, shortWhen, spendLine, type View } from "../model.ts";
 import { Avatar } from "./Avatar.tsx";
 import { Icon } from "./Icon.tsx";
+import { needsYou } from "./NeedsYou.tsx";
 
 export const LATER = "Arrives in a later update";
 
@@ -26,12 +27,12 @@ export function Sidebar({
     list.push(b);
     sections.set(b.department, list);
   }
-  const waiting = data.approvals.length;
+  const waiting = needsYou(data).length;
   const initial = (data.me.name.trim()[0] ?? "?").toUpperCase();
 
   const row = (b: ApiBot) => {
     const on = view.name === "bot" && view.id === b.id;
-    const badge = approvalsOf(data, b.id).length;
+    const badge = approvalsOf(data, b.id).length + runsOf(data, b.id).filter((r) => r.state === "REVIEWING").length;
     const last = runsOf(data, b.id)[0];
     const when = last?.createdAt ?? b.lastRunAt;
     return (
@@ -94,7 +95,11 @@ export function Sidebar({
         </button>
       </div>
 
-      <button type="button" className="new-bot t-body-m" title={`New bot: ${LATER}`} aria-disabled="true">
+      <button
+        type="button"
+        className={view.name === "new-bot" ? "new-bot on t-body-m" : "new-bot t-body-m"}
+        onClick={() => go({ name: "new-bot" })}
+      >
         <Icon name="plus-row" />
         New bot
       </button>

@@ -3,7 +3,7 @@
 
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-export type IdPrefix = "run" | "step" | "bot" | "dept" | "appr" | "evt";
+export type IdPrefix = "run" | "step" | "bot" | "dept" | "appr" | "evt" | "chat" | "msg";
 
 function encodeTime(ms: number): string {
   let out = "";
@@ -26,7 +26,7 @@ export function newId(prefix: IdPrefix, now: number = Date.now()): string {
   return `${prefix}_${encodeTime(now)}${encodeRandom()}`;
 }
 
-const ID_PATTERN = /^(run|step|bot|dept|appr|evt)_[0-9A-HJKMNP-TV-Z]{26}$/;
+const ID_PATTERN = /^(run|step|bot|dept|appr|evt|chat|msg)_[0-9A-HJKMNP-TV-Z]{26}$/;
 
 export function isId(value: string, prefix?: IdPrefix): boolean {
   if (!ID_PATTERN.test(value)) return false;

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ApiBot, ApiModel, ApiRun, ApiRunDetail } from "@covo/api";
+import type { ApiBot, ApiChanges, ApiChatMessage, ApiModel, ApiRun, ApiRunDetail } from "@covo/api";
 import { covoPaths } from "@covo/core";
 import { openDb } from "@covo/db";
 import { MockProvider } from "@covo/models";
@@ -15,6 +15,7 @@ import { type Running, serve } from "./server.ts";
 // Phase 3 M1: the local API, and who may use it.
 
 let root: string;
+let provider: MockProvider;
 let home: string;
 let running: Running;
 let base: string;
@@ -42,6 +43,11 @@ beforeEach(async () => {
   writeFileSync(join(root, "secret.txt"), "not for the web");
   await main(["init"], env());
   writeFileSync(join(home, "workspaces/default/README.md"), "# Demo\n");
+  provider = new MockProvider([
+    MockProvider.tool("write_file", { path: "NOTES.md", content: "hi\n" }),
+    MockProvider.tool("finish", { summary: "Wrote notes" }),
+    MockProvider.tool("finish", { summary: "Nothing else to do" }),
+  ]);
   const ctx: Ctx = {
     home,
     now: Date.now,
@@ -49,10 +55,7 @@ beforeEach(async () => {
     print: () => {},
     system: mac8,
     secrets,
-    provider: new MockProvider([
-      MockProvider.tool("write_file", { path: "NOTES.md", content: "hi\n" }),
-      MockProvider.tool("finish", { summary: "Wrote notes" }),
-    ]),
+    provider,
     listModels: async () => ["claude-opus-5-5"],
   };
   running = await serve(ctx);
@@ -201,6 +204,64 @@ describe("the app at /ui", () => {
     rmSync(join(uiDir, "index.html"));
     const page = await fetch(`${base}/ui/`);
     expect(await page.text()).toContain("bun run app:build");
+  });
+});
+
+/** Waits until the service reports `n` finished jobs. */
+async function finished(n: number, start: () => Promise<unknown>): Promise<void> {
+  const events = await fetch(`${base}/api/events`, { headers: auth() });
+  const reader = (events.body as ReadableStream<Uint8Array>).getReader();
+  await start();
+  let seen = "";
+  while ((seen.match(/"type":"(done|error)"/g) ?? []).length < n) {
+    const c = await reader.read();
+    if (c.done) break;
+    seen += new TextDecoder().decode(c.value);
+  }
+  await reader.cancel();
+}
+
+describe("chat (M3)", () => {
+  test("a message starts a task; the next one carries the chat so far as context", async () => {
+    const say = (text: string) =>
+      api("/bots/bot_assistant/messages", { method: "POST", body: JSON.stringify({ text }) });
+    await finished(1, async () => expect((await say("write NOTES.md")).status).toBe(201));
+    await finished(1, async () => expect((await say("anything else?")).status).toBe(201));
+
+    const msgs = (await (await api("/bots/bot_assistant/messages")).json()) as ApiChatMessage[];
+    expect(msgs.map((m) => m.text)).toEqual(["write NOTES.md", "anything else?"]);
+    expect(msgs.every((m) => m.runId !== null && m.error === null)).toBe(true);
+    const runs = (await (await api("/runs")).json()) as ApiRun[];
+    expect(runs[0]).toMatchObject({ goal: "anything else?", trigger: "api" });
+
+    const last = provider.requests.at(-1);
+    const task = JSON.stringify(last?.messages);
+    expect(task).toContain("Earlier in this chat");
+    expect(task).toContain("You: write NOTES.md");
+    expect(task).toContain("Assistant: Wrote notes");
+    expect(task).toContain("Task: anything else?");
+
+    // What the first task changed, with a diff, for the file-changes card.
+    const changes = (await (await api(`/runs/${msgs[0]?.runId}/changes`)).json()) as ApiChanges;
+    expect(changes.files).toEqual([expect.objectContaining({ path: "NOTES.md", kind: "added" })]);
+    expect(changes.files[0]?.hunks?.[0]?.lines).toContain("+hi");
+  });
+
+  test("messages need a real bot and some text", async () => {
+    expect((await api("/bots/nobody/messages")).status).toBe(409);
+    expect((await api("/bots/bot_assistant/messages", { method: "POST", body: "{}" })).status).toBe(400);
+  });
+
+  test("bots get the avatar you pick, and only real ones", async () => {
+    const ok = await api("/bots", {
+      method: "POST",
+      body: JSON.stringify({ name: "Pal", shape: "Gem", color: "rose" }),
+    });
+    expect(await ok.json()).toMatchObject({ shape: "Gem", color: "rose" });
+    const bad = await api("/bots", { method: "POST", body: JSON.stringify({ name: "Pal2", shape: "Star" }) });
+    expect(bad.status).toBe(409);
+    const providers = (await (await api("/providers")).json()) as { id: string; needsKey: boolean }[];
+    expect(providers).toContainEqual(expect.objectContaining({ id: "ollama", needsKey: false }));
   });
 });
 

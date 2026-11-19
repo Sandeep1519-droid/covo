@@ -33,7 +33,6 @@ export function Composer({
   const menu = useRef<HTMLDivElement>(null);
 
   // Grow with the text, up to a limit.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
   useEffect(() => {
     const el = box.current;
     if (!el) return;
