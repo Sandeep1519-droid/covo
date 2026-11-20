@@ -1,0 +1,15 @@
+{
+  "name": "@covo/phone",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fake": "./src/fake.ts"
+  },
+  "dependencies": {
+    "@covo/core": "workspace:*",
+    "@covo/db": "workspace:*",
+    "@covo/engine": "workspace:*"
+  }
+}

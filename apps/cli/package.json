@@ -13,6 +13,7 @@
     "@covo/models": "workspace:*",
     "@covo/platform": "workspace:*",
     "@covo/engine": "workspace:*",
-    "@covo/api": "workspace:*"
+    "@covo/api": "workspace:*",
+    "@covo/phone": "workspace:*"
   }
 }

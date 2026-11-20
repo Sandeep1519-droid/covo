@@ -7,6 +7,7 @@ import m0003 from "../migrations/0003_bot_models.sql" with { type: "text" };
 import m0004 from "../migrations/0004_spend_limits.sql" with { type: "text" };
 import m0005 from "../migrations/0005_run_owner.sql" with { type: "text" };
 import m0006 from "../migrations/0006_chat.sql" with { type: "text" };
+import m0007 from "../migrations/0007_phone.sql" with { type: "text" };
 
 /** Ordered list of migrations. Append only; never edit a shipped one. */
 export const MIGRATIONS: ReadonlyArray<{ version: number; name: string; sql: string }> = [
@@ -16,6 +17,7 @@ export const MIGRATIONS: ReadonlyArray<{ version: number; name: string; sql: str
   { version: 4, name: "0004_spend_limits", sql: m0004 },
   { version: 5, name: "0005_run_owner", sql: m0005 },
   { version: 6, name: "0006_chat", sql: m0006 },
+  { version: 7, name: "0007_phone", sql: m0007 },
 ];
 
 export function openDb(path: string): Database {

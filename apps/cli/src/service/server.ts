@@ -10,6 +10,7 @@ import { type Prepared, PrepareError, prepareRun, type RunHeader, type RunReques
 import { json as apiJson, handleApi } from "./api.ts";
 import { serviceHealth, socketPath } from "./client.ts";
 import { apiToken, Gate } from "./gate.ts";
+import { PhoneManager } from "./phone.ts";
 import { defaultUiDir, uiFile } from "./ui.ts";
 
 // covod, Covo's background service (Phase 3 M0). One process runs every bot task, so a task
@@ -289,6 +290,9 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
   }
   const recovered = recoverStaleRuns(ctx.home, { now: ctx.now });
   const service = new Service(ctx, o);
+  // Your phone (M5): while one is connected, the service listens to Telegram and sends updates.
+  const phone = new PhoneManager(ctx, service);
+  phone.start();
   const wanted = ctx.env.COVO_PORT !== undefined ? Number(ctx.env.COVO_PORT) : API_PORT;
   const gate = new Gate(apiToken(ctx.home), wanted, ctx.now);
   const uiDir = ctx.env.COVO_UI_DIR ?? defaultUiDir();
@@ -401,6 +405,7 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
     gate,
     recovered,
     async close() {
+      await phone.stop();
       await service.shutdown();
       server.stop(true);
       http?.stop(true);

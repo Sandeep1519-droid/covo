@@ -305,12 +305,14 @@ const toMessage = (m: ChatMessage): ApiChatMessage => ({
  * Saves your message and starts its task with the last few turns as context. If the task can't
  * start (no model, Covo shutting down), the message keeps the reason, so the chat can show it.
  */
-async function sendMessage(
+export async function sendMessage(
   ctx: Ctx,
   service: Service,
   bot: string,
   b: Record<string, unknown>,
   by: "token" | "session",
+  /** Where the task came from, when not the app or the API ("phone"). */
+  from?: string,
 ): Promise<ApiChatMessage> {
   if (typeof b.text !== "string" || !b.text.trim()) throw new HttpError(400, "Write a message first.");
   const model = typeof b.model === "string" && b.model ? b.model : undefined;
@@ -325,7 +327,7 @@ async function sendMessage(
       bot: found.id,
       ...(model ? { model } : {}),
       ...(context ? { context } : {}),
-      trigger: by === "session" ? "chat" : "api",
+      trigger: from ?? (by === "session" ? "chat" : "api"),
     });
     job.listeners.add((msg: ServiceMessage) => {
       if (msg.type === "event" && msg.event.type === "state") linkRun(ctx.home, message.id, msg.event.runId, ctx.now);

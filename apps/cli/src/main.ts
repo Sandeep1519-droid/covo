@@ -1,6 +1,7 @@
 import { covoHome, VERSION } from "@covo/core";
 import { type Engine, isPaused } from "@covo/engine";
 import type { Detected, ModelConfig, ModelProvider } from "@covo/models";
+import type { TelegramApi } from "@covo/phone";
 import type { SecretStore, SystemInfo } from "@covo/platform";
 import { auditCommand } from "./commands/audit.ts";
 import { botsCommand } from "./commands/bots.ts";
@@ -8,6 +9,7 @@ import { doctorCommand } from "./commands/doctor.ts";
 import { initCommand } from "./commands/init.ts";
 import { modelsCommand } from "./commands/models.ts";
 import { pauseCommand } from "./commands/pause.ts";
+import { phoneCommand } from "./commands/phone.ts";
 import { profileCommand } from "./commands/profile.ts";
 import { diffCommand, discardCommand, keepCommand, undoCommand } from "./commands/review.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
@@ -30,6 +32,8 @@ Commands (Phase 1):
   bots                Your bots, each with its own models and level; "covo bots create"
   run "<task>"        Give a bot a task on a safe copy  [--bot <name>] [--model <saved model>] [--here]
   stop <run>          Stop a task Covo's service is running
+  phone [connect|status|test|disconnect]
+                      Your phone (Telegram): answer spending pauses, see finished tasks
   pause               Pause all bots: no new task starts until you resume
   resume              Let paused bots start tasks again
   service             Covo's background service: status, install, uninstall
@@ -99,6 +103,8 @@ export interface Ctx {
   openUrl?: (url: string) => boolean;
   /** Tests learn when `covo service run` is up. */
   serviceStarted?: (r: Running) => void;
+  /** Tests replace Telegram (covo phone, and the service's phone link). */
+  telegram?: (token: string) => TelegramApi;
 }
 
 export async function main(
@@ -123,6 +129,7 @@ export async function main(
       | "launchctl"
       | "serviceStarted"
       | "openUrl"
+      | "telegram"
     >
   > = {},
 ): Promise<CliResult> {
@@ -147,6 +154,7 @@ export async function main(
   if (cmd === "service") return serviceCommand(ctx, rest);
   if (cmd === "stop") return stopCommand(ctx, rest);
   if (cmd === "pause" || cmd === "resume") return pauseCommand(ctx, cmd === "pause");
+  if (cmd === "phone") return phoneCommand(ctx, rest);
   if (cmd === "app") return appCommand(ctx);
   if (cmd === "log") return logCommand(ctx, rest);
   if (cmd === "models") return modelsCommand(ctx, rest);

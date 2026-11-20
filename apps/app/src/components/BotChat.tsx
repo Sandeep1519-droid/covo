@@ -418,6 +418,7 @@ function mergeSteps(a: LiveStep[], b: LiveStep[]): LiveStep[] {
 /** Where a task came from, when it wasn't this chat. */
 const FROM: Record<string, string> = {
   cli: "From the terminal",
+  phone: "From your phone",
   api: "From the API",
   chat: "From the app",
   cron: "From a routine",

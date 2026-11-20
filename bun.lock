@@ -35,6 +35,7 @@
         "@covo/db": "workspace:*",
         "@covo/engine": "workspace:*",
         "@covo/models": "workspace:*",
+        "@covo/phone": "workspace:*",
         "@covo/platform": "workspace:*",
         "@covo/sandbox": "workspace:*",
       },
@@ -72,6 +73,15 @@
       "dependencies": {
         "@anthropic-ai/sdk": "^1.10.0",
         "@covo/platform": "workspace:*",
+      },
+    },
+    "packages/phone": {
+      "name": "@covo/phone",
+      "version": "0.0.1",
+      "dependencies": {
+        "@covo/core": "workspace:*",
+        "@covo/db": "workspace:*",
+        "@covo/engine": "workspace:*",
       },
     },
     "packages/platform": {
@@ -127,6 +137,8 @@
     "@covo/engine": ["@covo/engine@workspace:packages/engine"],
 
     "@covo/models": ["@covo/models@workspace:packages/models"],
+
+    "@covo/phone": ["@covo/phone@workspace:packages/phone"],
 
     "@covo/platform": ["@covo/platform@workspace:packages/platform"],
 
