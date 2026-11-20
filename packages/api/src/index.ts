@@ -104,6 +104,8 @@ export interface ApiChatMessage {
   model: string | null;
   /** Why the task couldn't start. */
   error: string | null;
+  /** More than text, on the bot's own messages: the daily summary (kind "summary"), a routine made in chat. */
+  data?: Record<string, unknown> | null;
   createdAt: number;
 }
 
@@ -200,6 +202,49 @@ export interface ApiRun {
   createdAt: number;
   startedAt: number | null;
   finishedAt: number | null;
+  /** The routine it ran for (M6). */
+  routineId?: string | null;
+  routineName?: string | null;
+}
+
+/** GET /api/routines (M6): a bot's task on a schedule. */
+export interface ApiRoutine {
+  id: string;
+  name: string;
+  botId: string;
+  botName: string;
+  task: string;
+  /** As written ("weekdays 9:00") and in words ("Weekdays at 09:00"). */
+  schedule: string;
+  scheduleText: string;
+  status: "active" | "paused";
+  model: string | null;
+  runLimitUsd: number | null;
+  quiet: boolean;
+  nextAt: number | null;
+  lastAt: number | null;
+  lastError: string | null;
+  lastRun: { id: string; state: string; costUsd: number; finishedAt: number | null } | null;
+  createdAt: number;
+}
+
+/** POST /api/routines; PATCH /api/routines/:id takes any of these, plus status. */
+export interface NewRoutineRequest {
+  name: string;
+  bot: string;
+  task: string;
+  every: string;
+  model?: string | null;
+  runLimitUsd?: number | null;
+  quiet?: boolean;
+}
+
+/** GET/PUT /api/routine-settings */
+export interface ApiRoutineSettings {
+  missed: "run-once" | "skip";
+  quiet: { from: string; to: string } | null;
+  summaryAt: string | null;
+  subscriptions: boolean;
 }
 
 export interface ApiStep {
@@ -284,7 +329,8 @@ export type ApiEvent =
   | { type: "event"; job: string; event: { type: string; runId?: string; [k: string]: unknown } }
   | { type: "done"; job: string; summary: { runId: string; state: RunState; [k: string]: unknown } }
   | { type: "error"; job: string; message: string }
-  | { type: "paused"; paused: boolean };
+  | { type: "paused"; paused: boolean }
+  | { type: "changed"; what: string };
 
 /** GET /api/pause, POST /api/pause { paused }: pausing all bots stops new tasks from starting. */
 export interface ApiPause {

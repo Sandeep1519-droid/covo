@@ -9,12 +9,14 @@ export {
   modelConfig,
   providerFromConfig,
 } from "./config.ts";
-export type { AddConnection, Connection, Limits, Resolved, Settings } from "./connections.ts";
+export type { AddConnection, Connection, Limits, Resolved, RoutineSettings, Settings } from "./connections.ts";
 export {
   addConnection,
   DEFAULT_LIMITS,
+  DEFAULT_ROUTINE_SETTINGS,
   getLimits,
   getProfileChoice,
+  getRoutineSettings,
   loadSettings,
   NAME_RE,
   removeConnection,
@@ -23,6 +25,7 @@ export {
   setDefault,
   setLimits,
   setProfileChoice,
+  setRoutineSettings,
   settingsPath,
   suggestName,
 } from "./connections.ts";

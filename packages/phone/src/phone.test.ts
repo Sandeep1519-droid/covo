@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { covoPaths } from "@covo/core";
 import { initHome, openDb } from "@covo/db";
+import { addBotMessage } from "@covo/engine";
 import type { PhoneConfig } from "./config.ts";
 import { FakeTelegram } from "./fake.ts";
 import { approvalText } from "./format.ts";
@@ -272,6 +273,34 @@ describe("results and messages", () => {
     expect(tg.sent).toHaveLength(before);
     expect(started).toHaveLength(1);
     expect(audits("phone.ignored")).toBe(1);
+  });
+
+  test("the daily summary goes to the phone; a quiet routine's job well done doesn't", async () => {
+    const d = db();
+    d.query(
+      `INSERT INTO routines (id, agent_id, name, task, schedule, quiet, created_at, updated_at)
+       VALUES ('rtn_q', 'bot_assistant', 'Inbox tidy', 'tidy', '9:00', 1, 1, 1)`,
+    ).run();
+    d.query(
+      `INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, summary, error, created_at, finished_at, routine_id)
+       VALUES ('run_q', 'bot_assistant', 'dept_default', 'routine', 'tidy', 'SUCCEEDED', 'Sorted.', NULL, 1, ?, 'rtn_q'),
+              ('run_qf', 'bot_assistant', 'dept_default', 'routine', 'tidy', 'FAILED', NULL, 'No key.', 1, ?, 'rtn_q')`,
+    ).run(t - 10_000, t - 10_000);
+    d.close();
+    addBotMessage(home, "Assistant", "Your day: 1 task done.", { kind: "summary" }, now);
+    const link = new PhoneLink({ home, telegram: tg, config: config(), now });
+    await link.scan();
+    const texts = tg.sent.map((m) => m.text);
+    expect(texts).toContainEqual("Your day: 1 task done.");
+    expect(texts).toContainEqual(expect.stringContaining("Assistant, Inbox tidy\nCouldn't finish"));
+    expect(texts.some((x) => x.includes("Sorted."))).toBe(false);
+    await link.scan();
+    expect(tg.sent).toHaveLength(2);
+
+    const quiet = new FakeTelegram();
+    addBotMessage(home, "Assistant", "Your day: 2 tasks done.", { kind: "summary" }, now);
+    await new PhoneLink({ home, telegram: quiet, config: config({ notify: "needs-you" }), now }).scan();
+    expect(quiet.sent.map((m) => m.text)).toEqual([]);
   });
 
   test("the test card's buttons answer, and change nothing", async () => {

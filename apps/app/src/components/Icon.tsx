@@ -7,6 +7,8 @@ import checkPrimaryD from "../assets/icons/dark/check-primary.svg";
 import checkSecondaryD from "../assets/icons/dark/check-secondary.svg";
 import chevronD from "../assets/icons/dark/chevron.svg";
 import chevronLgD from "../assets/icons/dark/chevron-lg.svg";
+import chevronRowD from "../assets/icons/dark/chevron-row.svg";
+import clockD from "../assets/icons/dark/clock.svg";
 import closeD from "../assets/icons/dark/close.svg";
 import computerD from "../assets/icons/dark/computer.svg";
 import detailsD from "../assets/icons/dark/details.svg";
@@ -28,10 +30,14 @@ import micD from "../assets/icons/dark/mic.svg";
 import moreD from "../assets/icons/dark/more.svg";
 import newSectionD from "../assets/icons/dark/new-section.svg";
 import panelD from "../assets/icons/dark/panel.svg";
+import playD from "../assets/icons/dark/play.svg";
 import plusD from "../assets/icons/dark/plus.svg";
 import plusRowD from "../assets/icons/dark/plus-row.svg";
+import plusSmallD from "../assets/icons/dark/plus-small.svg";
 import railNeedsYouD from "../assets/icons/dark/rail-needs-you.svg";
 import refreshPrimaryD from "../assets/icons/dark/refresh-primary.svg";
+import runFailedD from "../assets/icons/dark/run-failed.svg";
+import runOkD from "../assets/icons/dark/run-ok.svg";
 import searchD from "../assets/icons/dark/search.svg";
 import sendD from "../assets/icons/dark/send.svg";
 import shareD from "../assets/icons/dark/share.svg";
@@ -51,6 +57,8 @@ import checkPrimaryL from "../assets/icons/light/check-primary.svg";
 import checkSecondaryL from "../assets/icons/light/check-secondary.svg";
 import chevronL from "../assets/icons/light/chevron.svg";
 import chevronLgL from "../assets/icons/light/chevron-lg.svg";
+import chevronRowL from "../assets/icons/light/chevron-row.svg";
+import clockL from "../assets/icons/light/clock.svg";
 import closeL from "../assets/icons/light/close.svg";
 import computerL from "../assets/icons/light/computer.svg";
 import detailsL from "../assets/icons/light/details.svg";
@@ -72,10 +80,14 @@ import micL from "../assets/icons/light/mic.svg";
 import moreL from "../assets/icons/light/more.svg";
 import newSectionL from "../assets/icons/light/new-section.svg";
 import panelL from "../assets/icons/light/panel.svg";
+import playL from "../assets/icons/light/play.svg";
 import plusL from "../assets/icons/light/plus.svg";
 import plusRowL from "../assets/icons/light/plus-row.svg";
+import plusSmallL from "../assets/icons/light/plus-small.svg";
 import railNeedsYouL from "../assets/icons/light/rail-needs-you.svg";
 import refreshPrimaryL from "../assets/icons/light/refresh-primary.svg";
+import runFailedL from "../assets/icons/light/run-failed.svg";
+import runOkL from "../assets/icons/light/run-ok.svg";
 import searchL from "../assets/icons/light/search.svg";
 import sendL from "../assets/icons/light/send.svg";
 import shareL from "../assets/icons/light/share.svg";
@@ -135,6 +147,12 @@ const ICONS = {
   key: [keyL, keyD, 20, 20],
   terminal: [terminalL, terminalD, 20, 20],
   "folder-lg": [folderLgL, folderLgD, 20, 20],
+  clock: [clockL, clockD, 20, 20],
+  "chevron-row": [chevronRowL, chevronRowD, 16, 16],
+  play: [playL, playD, 16, 16],
+  "plus-small": [plusSmallL, plusSmallD, 16, 16],
+  "run-ok": [runOkL, runOkD, 20, 20],
+  "run-failed": [runFailedL, runFailedD, 20, 20],
 } as const;
 
 export type IconName = keyof typeof ICONS;

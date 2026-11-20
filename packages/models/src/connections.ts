@@ -40,6 +40,59 @@ export interface Settings {
   limits?: Partial<Limits>;
   /** A power profile you chose (covo profile set); absent = detect from the Mac. */
   profile?: string;
+  /** Routines and the daily summary (Phase 3 M6). */
+  routines?: Partial<RoutineSettings>;
+}
+
+/** How routines run (Phase 3 M6). */
+export interface RoutineSettings {
+  /** A run missed while the Mac slept (or was paused): run it once when possible, or skip it. */
+  missed: "run-once" | "skip";
+  /** No routine starts in these hours ("22:00"–"07:00"); one that's due waits until they end. */
+  quiet: { from: string; to: string } | null;
+  /** When the daily summary is made ("18:00"), or null for none. */
+  summaryAt: string | null;
+  /** Let routines use subscription engines (Claude Code). Off: check your provider's terms first. */
+  subscriptions: boolean;
+}
+
+export const DEFAULT_ROUTINE_SETTINGS: RoutineSettings = {
+  missed: "run-once",
+  quiet: null,
+  summaryAt: "18:00",
+  subscriptions: false,
+};
+
+const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+export function getRoutineSettings(home: string): RoutineSettings {
+  const r = loadSettings(home).routines ?? {};
+  const d = DEFAULT_ROUTINE_SETTINGS;
+  return {
+    missed: r.missed === "skip" ? "skip" : d.missed,
+    quiet: r.quiet && HHMM.test(r.quiet.from) && HHMM.test(r.quiet.to) && r.quiet.from !== r.quiet.to ? r.quiet : null,
+    summaryAt:
+      r.summaryAt === null
+        ? null
+        : typeof r.summaryAt === "string" && HHMM.test(r.summaryAt)
+          ? r.summaryAt
+          : d.summaryAt,
+    subscriptions: r.subscriptions === true,
+  };
+}
+
+export function setRoutineSettings(home: string, changes: Partial<RoutineSettings>): RoutineSettings {
+  if (changes.summaryAt !== undefined && changes.summaryAt !== null && !HHMM.test(changes.summaryAt))
+    throw new ModelConfigError(`"${changes.summaryAt}" isn't a time. Use 24-hour time, like 18:00.`);
+  if (changes.quiet) {
+    const { from, to } = changes.quiet;
+    if (!HHMM.test(from) || !HHMM.test(to) || from === to)
+      throw new ModelConfigError("Quiet hours need two different times, like 22:00-07:00.");
+  }
+  const s = loadSettings(home);
+  s.routines = { ...s.routines, ...changes };
+  saveSettings(home, s);
+  return getRoutineSettings(home);
 }
 
 const EMPTY: Settings = { version: 1, connections: [] };
@@ -58,6 +111,7 @@ export function loadSettings(home: string): Settings {
       default: s.default,
       ...(s.limits ? { limits: s.limits } : {}),
       ...(s.profile ? { profile: s.profile } : {}),
+      ...(s.routines ? { routines: s.routines } : {}),
     };
   } catch (e) {
     throw new ModelConfigError(`${p} is damaged (${(e as Error).message}). Fix or delete it.`);

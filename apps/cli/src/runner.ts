@@ -12,6 +12,7 @@ import {
 } from "@covo/engine";
 import {
   getLimits,
+  getRoutineSettings,
   loadUserPrices,
   type ModelConfig,
   ModelConfigError,
@@ -31,6 +32,11 @@ export interface RunRequest {
   goal: string;
   /** Earlier chat turns, sent as background (the app's chat). */
   context?: string;
+  /** A routine's run (M6): nobody is watching, so subscription engines are left out unless allowed. */
+  routineId?: string;
+  unattended?: boolean;
+  /** The routine's own spending limit per run. */
+  runLimitUsd?: number | null;
   bot?: string;
   model?: string;
   trigger?: string;
@@ -70,6 +76,7 @@ export async function prepareRun(ctx: Ctx, req: RunRequest): Promise<Prepared> {
   let bot: Bot | undefined;
   const entries: { label: string; cfg: ModelConfig; provider?: ModelProvider; engine?: Engine }[] = [];
   const skipped: string[] = [];
+  let unattendedSkips = 0;
   try {
     if (req.bot) bot = findBot(ctx.home, req.bot, ctx.now);
     const names: (string | undefined)[] = req.model ? [req.model] : bot?.models.length ? bot.models : [undefined];
@@ -77,6 +84,13 @@ export async function prepareRun(ctx: Ctx, req: RunRequest): Promise<Prepared> {
       try {
         const cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), env, n);
         const label = n ?? cfg.connection ?? cfg.model;
+        if (cfg.engine && req.unattended && !getRoutineSettings(ctx.home).subscriptions) {
+          // Routines run with nobody watching; subscriptions are for you at the keyboard unless you
+          // allow it (Settings, or: covo routines subscriptions on). Check your provider's terms first.
+          skipped.push(`${label}: routines don't use subscriptions unless you allow it`);
+          unattendedSkips++;
+          continue;
+        }
         if (cfg.engine) {
           // A subscription engine (docs/SUBSCRIPTIONS.md): it runs first and does the whole task.
           const engine = makeEngine(ctx, cfg.engine, cfg.model);
@@ -101,6 +115,15 @@ export async function prepareRun(ctx: Ctx, req: RunRequest): Promise<Prepared> {
     }
     throw e;
   }
+  // A routine whose only models are subscriptions falls back to the free local model.
+  if (!entries.length && unattendedSkips > 0) {
+    try {
+      const cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), env, "local");
+      entries.push({ label: "local", cfg, provider: ctx.provider ?? providerFromConfig(cfg) });
+    } catch (e) {
+      skipped.push(`local: ${(e as Error).message}`);
+    }
+  }
   if (!entries.length) {
     throw new PrepareError(`None of ${bot?.name ?? "the bot"}'s models can be used:\n  ${skipped.join("\n  ")}`);
   }
@@ -124,6 +147,8 @@ export async function prepareRun(ctx: Ctx, req: RunRequest): Promise<Prepared> {
       home: ctx.home,
       goal: req.goal,
       ...(req.context ? { context: req.context } : {}),
+      ...(req.routineId ? { routineId: req.routineId } : {}),
+      ...(req.runLimitUsd !== undefined && req.runLimitUsd !== null ? { runLimitUsd: req.runLimitUsd } : {}),
       ...(req.trigger ? { trigger: req.trigger } : {}),
       ...(bot ? { agentId: bot.id } : {}),
       ...(chain ? { chain } : { provider: first.provider as ModelProvider }),

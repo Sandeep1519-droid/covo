@@ -12,6 +12,7 @@ import { pauseCommand } from "./commands/pause.ts";
 import { phoneCommand } from "./commands/phone.ts";
 import { profileCommand } from "./commands/profile.ts";
 import { diffCommand, discardCommand, keepCommand, undoCommand } from "./commands/review.ts";
+import { routinesCommand, summaryCommand } from "./commands/routines.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
 import { appCommand, type Launchctl, serviceCommand, stopCommand } from "./commands/service.ts";
 import { decideCommand, limitsCommand, pricesCommand, usageCommand } from "./commands/spend.ts";
@@ -34,6 +35,9 @@ Commands (Phase 1):
   stop <run>          Stop a task Covo's service is running
   phone [connect|status|test|disconnect]
                       Your phone (Telegram): answer spending pauses, see finished tasks
+  routines            Tasks on a schedule ("weekdays 9:00"): add, list, pause, run, remove
+  summary [at HH:MM|off|now]
+                      The daily summary: what ran, what changed, what was spent, what waits
   pause               Pause all bots: no new task starts until you resume
   resume              Let paused bots start tasks again
   service             Covo's background service: status, install, uninstall
@@ -155,6 +159,8 @@ export async function main(
   if (cmd === "stop") return stopCommand(ctx, rest);
   if (cmd === "pause" || cmd === "resume") return pauseCommand(ctx, cmd === "pause");
   if (cmd === "phone") return phoneCommand(ctx, rest);
+  if (cmd === "routines" || cmd === "routine") return routinesCommand(ctx, rest);
+  if (cmd === "summary") return summaryCommand(ctx, rest);
   if (cmd === "app") return appCommand(ctx);
   if (cmd === "log") return logCommand(ctx, rest);
   if (cmd === "models") return modelsCommand(ctx, rest);

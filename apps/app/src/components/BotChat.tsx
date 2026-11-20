@@ -1,4 +1,4 @@
-import type { ApiBot, ApiChatMessage, ApiRun, ApiRunDetail } from "@covo/api";
+import type { ApiBot, ApiChatMessage, ApiRoutine, ApiRun, ApiRunDetail } from "@covo/api";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.ts";
 import {
@@ -20,7 +20,8 @@ import { Avatar } from "./Avatar.tsx";
 import { ChangesCard, LiveSteps, SpendCard, StoppedCard, useChanges } from "./Cards.tsx";
 import { Composer } from "./Composer.tsx";
 import { Icon } from "./Icon.tsx";
-import { Pill } from "./Pill.tsx";
+import { Button, Pill } from "./Pill.tsx";
+import { BotDetails, type DailySummary, type DetailsTab, RoutineEditor, SummaryCard } from "./Routines.tsx";
 import { LATER } from "./Sidebar.tsx";
 
 const SUGGESTIONS = [
@@ -52,6 +53,10 @@ export function BotChat({
   const [modelName, setModelName] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The details panel beside the chat (Figma B4), and the routine open in the editor (B5; null: a new one).
+  const [details, setDetails] = useState(false);
+  const [detailsTab, setDetailsTab] = useState<DetailsTab>("about");
+  const [editing, setEditing] = useState<ApiRoutine | null | undefined>(undefined);
   const end = useRef<HTMLDivElement>(null);
 
   const model = (modelName && data.models.find((m) => m.name === modelName)) || modelFor(data, bot);
@@ -81,7 +86,10 @@ export function BotChat({
     setText("");
     setModelName(undefined);
     setError(null);
+    setEditing(undefined);
   }, [bot.id]);
+
+  const openRoutine = (r: ApiRoutine | null) => setEditing(r);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reload on every update from the service
   useEffect(() => {
@@ -132,81 +140,113 @@ export function BotChat({
           <Icon name="computer" />
           Computer
         </span>
-        <span className="icon-btn" title={`Details: ${LATER}`}>
+        <button
+          type="button"
+          className={details ? "icon-btn on" : "icon-btn"}
+          aria-label="Details"
+          aria-pressed={details}
+          title={details ? "Hide details" : "Details and routines"}
+          onClick={() => setDetails((d) => !d)}
+        >
           <Icon name="details" />
-        </span>
+        </button>
         <span className="icon-btn" title={`Share: ${LATER}`}>
           <Icon name="share" />
         </span>
       </header>
 
-      <div className="chat-scroll">
-        {timeline === null ? null : timeline.length === 0 ? (
-          <div className="chat-empty">
-            <Avatar shape={bot.shape} color={bot.color} size={72} />
-            <h1 className="t-display">What should {bot.name} do?</h1>
-            <div className="suggestions">
-              {SUGGESTIONS.map((s) => (
-                <button type="button" key={s} className="suggestion t-body-s" onClick={() => setText(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
+      <div className="chat-body">
+        <div className="chat-main">
+          <div className="chat-scroll">
+            {timeline === null ? null : timeline.length === 0 ? (
+              <div className="chat-empty">
+                <Avatar shape={bot.shape} color={bot.color} size={72} />
+                <h1 className="t-display">What should {bot.name} do?</h1>
+                <div className="suggestions">
+                  {SUGGESTIONS.map((s) => (
+                    <button type="button" key={s} className="suggestion t-body-s" onClick={() => setText(s)}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="messages">
+                {timeline.map((item, i) => {
+                  const prev = timeline[i - 1];
+                  const m = item.message;
+                  return (
+                    <Fragment key={item.key}>
+                      {(!prev || !sameDay(prev.at, item.at)) && (
+                        <div className="day t-caption muted">
+                          <span className="rule" />
+                          {dayLabel(item.at)}
+                          <span className="rule" />
+                        </div>
+                      )}
+                      <Turn
+                        data={data}
+                        bot={bot}
+                        message={m}
+                        from={item.from}
+                        steps={m.runId ? steps(m.runId) : []}
+                        refresh={() => {
+                          refresh();
+                          void load();
+                        }}
+                        retry={() => send(m.text)}
+                        go={go}
+                        openRoutine={(id) => {
+                          const r = data.routines.find((x) => x.id === id);
+                          if (r) openRoutine(r);
+                        }}
+                      />
+                    </Fragment>
+                  );
+                })}
+                <div ref={end} />
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="messages">
-            {timeline.map((item, i) => {
-              const prev = timeline[i - 1];
-              const m = item.message;
-              return (
-                <Fragment key={item.key}>
-                  {(!prev || !sameDay(prev.at, item.at)) && (
-                    <div className="day t-caption muted">
-                      <span className="rule" />
-                      {dayLabel(item.at)}
-                      <span className="rule" />
-                    </div>
-                  )}
-                  <Turn
-                    data={data}
-                    bot={bot}
-                    message={m}
-                    from={item.from}
-                    steps={m.runId ? steps(m.runId) : []}
-                    refresh={() => {
-                      refresh();
-                      void load();
-                    }}
-                    retry={() => send(m.text)}
-                    go={go}
-                  />
-                </Fragment>
-              );
-            })}
-            <div ref={end} />
-          </div>
-        )}
-      </div>
 
-      <div className="composer-wrap">
-        {error && (
-          <p className="composer-error t-body-s" role="alert">
-            {error}
-          </p>
+          <div className="composer-wrap">
+            {error && (
+              <p className="composer-error t-body-s" role="alert">
+                {error}
+              </p>
+            )}
+            <Composer
+              botName={bot.name}
+              section={bot.department}
+              level={LEVEL_LABEL[bot.level]}
+              models={data.models}
+              model={model}
+              onModel={setModelName}
+              text={text}
+              onText={setText}
+              onSend={() => void send()}
+              busy={busy}
+            />
+          </div>
+        </div>
+        {details && (
+          <BotDetails data={data} bot={bot} tab={detailsTab} setTab={setDetailsTab} openRoutine={openRoutine} />
         )}
-        <Composer
-          botName={bot.name}
-          section={bot.department}
-          level={LEVEL_LABEL[bot.level]}
-          models={data.models}
-          model={model}
-          onModel={setModelName}
-          text={text}
-          onText={setText}
-          onSend={() => void send()}
-          busy={busy}
-        />
       </div>
+      {editing !== undefined && (
+        <RoutineEditor
+          data={data}
+          routine={editing && (data.routines.find((r) => r.id === editing.id) ?? editing)}
+          botId={bot.id}
+          fixedBot
+          close={() => setEditing(undefined)}
+          refresh={() => {
+            refresh();
+            void load();
+          }}
+          go={go}
+        />
+      )}
     </section>
   );
 }
@@ -220,6 +260,7 @@ function Turn({
   refresh,
   retry,
   go,
+  openRoutine,
 }: {
   data: Data;
   bot: ApiBot;
@@ -230,8 +271,13 @@ function Turn({
   refresh: () => void;
   retry: () => void;
   go: (v: View) => void;
+  openRoutine: (id: string) => void;
 }) {
+  if (message.role === "bot")
+    return <BotNote data={data} bot={bot} message={message} refresh={refresh} go={go} openRoutine={openRoutine} />;
   const run = runById(data, message.runId);
+  // Asking for a routine starts no task now: the bot's answer is its own message.
+  const routineAsk = message.data?.kind === "routine";
   return (
     <>
       <div className="you-says">
@@ -243,17 +289,62 @@ function Turn({
           </span>
         </div>
       </div>
-      <BotReply
-        data={data}
-        bot={bot}
-        message={message}
-        run={run}
-        steps={steps}
-        refresh={refresh}
-        retry={retry}
-        go={go}
-      />
+      {!routineAsk && (
+        <BotReply
+          data={data}
+          bot={bot}
+          message={message}
+          run={run}
+          steps={steps}
+          refresh={refresh}
+          retry={retry}
+          go={go}
+        />
+      )}
     </>
+  );
+}
+
+/** A message the bot wrote by itself: the daily summary, or "OK: I'll do that every weekday at 9:00". */
+function BotNote({
+  data,
+  bot,
+  message,
+  refresh,
+  go,
+  openRoutine,
+}: {
+  data: Data;
+  bot: ApiBot;
+  message: ApiChatMessage;
+  refresh: () => void;
+  go: (v: View) => void;
+  openRoutine: (id: string) => void;
+}) {
+  const d = message.data;
+  const summary = d?.kind === "summary" ? (d as unknown as DailySummary) : null;
+  const routineId = d?.kind === "routine-made" && typeof d.routineId === "string" ? d.routineId : null;
+  const routine = routineId ? data.routines.find((r) => r.id === routineId) : undefined;
+  return (
+    <div className="bot-says">
+      <Avatar shape={bot.shape} color={bot.color} size={28} />
+      <div className="bot-says-body">
+        <div className="bot-says-head">
+          <span className="t-body-m-strong">{bot.name}</span>
+          <span className="t-caption muted">{clock(message.createdAt)}</span>
+        </div>
+        {/* The summary's text is for your phone; here, its first line and the card. */}
+        <p className="t-body-m">{summary ? message.text.split("\n")[0] : message.text}</p>
+        {summary && <SummaryCard data={data} summary={summary} go={go} onDone={refresh} />}
+        {routine && (
+          <div>
+            <Button kind="secondary" small onClick={() => openRoutine(routine.id)}>
+              Open routine
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -447,7 +538,12 @@ function chatTimeline(data: Data, botId: string, messages: ApiChatMessage[]): Ti
       (r): TimelineItem => ({
         key: r.id,
         at: r.createdAt,
-        from: FROM[r.trigger] ?? "From outside this chat",
+        from:
+          r.trigger === "routine"
+            ? r.routineName
+              ? `Routine: ${r.routineName}`
+              : "From a routine"
+            : (FROM[r.trigger] ?? "From outside this chat"),
         message: {
           id: r.id,
           role: "you",

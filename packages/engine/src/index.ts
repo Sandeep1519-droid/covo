@@ -3,7 +3,7 @@ export { approvalStreak, archiveBot, createBot, findBot, LEVELS, listBots, updat
 export type { AskApproval, SpendLimits, SpendRequest } from "./budget.ts";
 export { Budget, decide, startOfLocalDay, usd } from "./budget.ts";
 export type { ChatMessage, NewMessage } from "./chat.ts";
-export { addMessage, CONTEXT_TURNS, failMessage, linkRun, listMessages } from "./chat.ts";
+export { addBotMessage, addMessage, CONTEXT_TURNS, failMessage, linkRun, listMessages } from "./chat.ts";
 export type { Engine, EngineResult, EngineTask } from "./engines.ts";
 export {
   CLAUDE_CODE_TOOLS,
@@ -34,9 +34,34 @@ export {
   UNDO_MAX_BYTES,
   undoRun,
 } from "./review.ts";
+export type { NewRoutine, Routine, RoutineChanges } from "./routines.ts";
+export {
+  addRoutine,
+  dueRoutines,
+  getRoutine,
+  listRoutines,
+  removeRoutine,
+  routineBusy,
+  routineRuns,
+  settleRoutine,
+  updateRoutine,
+} from "./routines.ts";
 export type { EngineEntry, RunChainEntry, RunEvent, RunSummary, StartRunOptions } from "./run.ts";
 export { ENGINE_TIMEOUT_MS, isEngineEntry, RunError, startRun } from "./run.ts";
+export type { Quiet, Schedule } from "./schedule.ts";
+export {
+  describeSchedule,
+  inQuietHours,
+  nextRun,
+  parseSchedule,
+  parseTime,
+  quietHoursEnd,
+  routineFromChat,
+  ScheduleError,
+} from "./schedule.ts";
 export type { RunState } from "./state.ts";
 export { recordState } from "./state.ts";
+export type { DailySummary, SummaryRun } from "./summary.ts";
+export { composeSummary, lastSummaryAt, postSummary, setLastSummaryAt, summaryText } from "./summary.ts";
 export type { ToolContext, ToolResult } from "./tools.ts";
 export { insideWorkspace, PathError, runTool, TOOL_SPECS } from "./tools.ts";

@@ -1,4 +1,4 @@
-import type { ApiApproval, ApiBot, ApiEvent, ApiMe, ApiModel, ApiPause, ApiRun, ApiUsage } from "@covo/api";
+import type { ApiApproval, ApiBot, ApiEvent, ApiMe, ApiModel, ApiPause, ApiRoutine, ApiRun, ApiUsage } from "@covo/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiFail, api, listen, pair } from "./api.ts";
 import { BotChat } from "./components/BotChat.tsx";
@@ -9,6 +9,7 @@ import { NewBot } from "./components/NewBot.tsx";
 import { Gatekeeper, Later } from "./components/Pages.tsx";
 import { Rail } from "./components/Rail.tsx";
 import { Review } from "./components/Review.tsx";
+import { RoutinesPage } from "./components/Routines.tsx";
 import { SettingsWindow } from "./components/Settings.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { type Data, hashFor, type LiveStep, MAIN_BOT, type View, viewFromHash } from "./model.ts";
@@ -16,7 +17,7 @@ import { inMacApp, reportDragRegions, reportTheme } from "./shell.ts";
 import { ThemeContext, useThemeState } from "./theme.ts";
 
 async function load(): Promise<Data> {
-  const [me, bots, models, runs, approvals, usage, pause] = await Promise.all([
+  const [me, bots, models, runs, approvals, usage, pause, routines] = await Promise.all([
     api<ApiMe>("/me"),
     api<ApiBot[]>("/bots"),
     api<ApiModel[]>("/models"),
@@ -24,8 +25,9 @@ async function load(): Promise<Data> {
     api<ApiApproval[]>("/approvals"),
     api<ApiUsage>("/usage?days=1"),
     api<ApiPause>("/pause"),
+    api<ApiRoutine[]>("/routines"),
   ]);
-  return { me, bots, models, runs, approvals, usage, pause };
+  return { me, bots, models, runs, approvals, usage, pause, routines };
 }
 
 type Gate = "loading" | "expired" | "signed-out" | "down" | "ready";
@@ -219,8 +221,7 @@ export function App() {
   else if (screen.name === "new-bot") main = <NewBot data={data} go={go} refresh={refresh} />;
   else if (screen.name === "library")
     main = <Later title="Library" what="Your files, memory and the activity log will live here. For now: covo log." />;
-  else if (screen.name === "more")
-    main = <Later title="More" what="Routines, skills and connections arrive here later." />;
+  else if (screen.name === "more") main = <RoutinesPage data={data} refresh={refresh} go={go} />;
   else if (bot) main = <BotChat data={data} bot={bot} tick={tick} steps={stepsOf} refresh={refresh} go={go} />;
   else main = <Later title="Covo" what="No bots yet. Make one with New bot." />;
 

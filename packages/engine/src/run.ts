@@ -78,6 +78,10 @@ export interface StartRunOptions {
   goal: string;
   /** Earlier chat turns (Phase 3 M3), sent with the task as background. Not saved as the goal. */
   context?: string;
+  /** The routine this run belongs to (Phase 3 M6). */
+  routineId?: string;
+  /** A routine's own spending limit per run; wins over the bot's and the general one. */
+  runLimitUsd?: number | null;
   /** One model… */
   provider?: ModelProvider;
   /**
@@ -225,9 +229,9 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
   let state: RunState = "QUEUED";
 
   db.query(
-    `INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, model, created_at, pid)
-     VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
-  ).run(runId, agent.id, dept.id, o.trigger ?? "cli", o.goal, firstModel, started, process.pid);
+    `INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, model, created_at, pid, routine_id)
+     VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?, ?)`,
+  ).run(runId, agent.id, dept.id, o.trigger ?? "cli", o.goal, firstModel, started, process.pid, o.routineId ?? null);
   appendAudit(
     db,
     {
@@ -392,7 +396,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
       runId,
       botName: agent.name,
       limits: {
-        runUsd: agent.run_limit_usd ?? o.spend?.runUsd ?? null,
+        runUsd: o.runLimitUsd ?? agent.run_limit_usd ?? o.spend?.runUsd ?? null,
         dayUsd: o.spend?.dayUsd ?? null,
       },
       prices: o.prices ?? {},

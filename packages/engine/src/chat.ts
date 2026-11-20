@@ -25,6 +25,8 @@ export interface ChatMessage {
   model: string | null;
   /** The task couldn't start (no model, Covo shutting down…). */
   error: string | null;
+  /** More than text: the daily summary's sections, a routine made in chat. */
+  data: Record<string, unknown> | null;
   createdAt: number;
 }
 
@@ -36,8 +38,19 @@ interface Row {
   run_id: string | null;
   model: string | null;
   error: string | null;
+  data_json: string | null;
   created_at: number;
 }
+
+const parseData = (s: string | null): Record<string, unknown> | null => {
+  if (!s) return null;
+  try {
+    const v = JSON.parse(s) as unknown;
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+};
 
 const toMessage = (r: Row): ChatMessage => ({
   id: r.id,
@@ -47,6 +60,7 @@ const toMessage = (r: Row): ChatMessage => ({
   runId: r.run_id,
   model: r.model,
   error: r.error,
+  data: parseData(r.data_json),
   createdAt: r.created_at,
 });
 
@@ -90,7 +104,7 @@ function conversation(db: Database, agentId: string, now: () => number): string 
   return id;
 }
 
-const SELECT = "SELECT id, conversation_id, role, text, run_id, model, error, created_at FROM messages";
+const SELECT = "SELECT id, conversation_id, role, text, run_id, model, error, data_json, created_at FROM messages";
 
 /** The latest messages with a bot, oldest first. */
 export function listMessages(home: string, bot: string, o: { limit?: number; now?: () => number } = {}): ChatMessage[] {
@@ -154,7 +168,7 @@ export function addMessage(
   home: string,
   bot: string,
   text: string,
-  o: { model?: string; now?: () => number } = {},
+  o: { model?: string; now?: () => number; data?: Record<string, unknown> } = {},
 ): NewMessage {
   const now = o.now ?? Date.now;
   const t = text.trim();
@@ -168,8 +182,8 @@ export function addMessage(
       const context = contextFor(db, conv, at, b.name);
       const id = newId("msg", at);
       db.query(
-        "INSERT INTO messages (id, conversation_id, role, text, model, created_at) VALUES (?, ?, 'you', ?, ?, ?)",
-      ).run(id, conv, t, o.model ?? null, at);
+        "INSERT INTO messages (id, conversation_id, role, text, model, data_json, created_at) VALUES (?, ?, 'you', ?, ?, ?, ?)",
+      ).run(id, conv, t, o.model ?? null, o.data ? JSON.stringify(o.data) : null, at);
       db.query("UPDATE conversations SET updated_at = ? WHERE id = ?").run(at, conv);
       const row = db.query<Row, [string]>(`${SELECT} WHERE id = ?`).get(id) as Row;
       return { message: toMessage(row), bot: b, context };
@@ -189,4 +203,27 @@ export function failMessage(home: string, messageId: string, error: string, now:
   withDb(home, now, (db) => {
     db.query("UPDATE messages SET error = ? WHERE id = ? AND run_id IS NULL").run(error, messageId);
   });
+}
+
+/** A message from the bot that isn't a task's reply: the daily summary, a routine made in chat. */
+export function addBotMessage(
+  home: string,
+  bot: string,
+  text: string,
+  data: Record<string, unknown> | null = null,
+  now: () => number = Date.now,
+): ChatMessage {
+  return withDb(home, now, (db) =>
+    db.transaction(() => {
+      const b = botId(db, bot);
+      const conv = conversation(db, b.id, now);
+      const at = now();
+      const id = newId("msg", at);
+      db.query(
+        "INSERT INTO messages (id, conversation_id, role, text, data_json, created_at) VALUES (?, ?, 'bot', ?, ?, ?)",
+      ).run(id, conv, text, data ? JSON.stringify(data) : null, at);
+      db.query("UPDATE conversations SET updated_at = ? WHERE id = ?").run(at, conv);
+      return toMessage(db.query<Row, [string]>(`${SELECT} WHERE id = ?`).get(id) as Row);
+    })(),
+  );
 }

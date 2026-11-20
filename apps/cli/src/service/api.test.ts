@@ -337,6 +337,98 @@ describe("the Mac app (M4)", () => {
   });
 });
 
+describe("routines (M6)", () => {
+  test("create, change, pause, run now, remove; the schedule preview explains itself", async () => {
+    const made = await api("/routines", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Morning brief",
+        bot: "Assistant",
+        task: "Summarise yesterday",
+        every: "weekdays 8:30",
+      }),
+    });
+    expect(made.status).toBe(201);
+    const r = (await made.json()) as { id: string; scheduleText: string; status: string };
+    expect(r).toMatchObject({ scheduleText: "Weekdays at 08:30", status: "active" });
+    expect(
+      (await api("/routines", { method: "POST", body: JSON.stringify({ name: "x", bot: "Assistant", task: "y" }) }))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await api("/routines", {
+          method: "POST",
+          body: JSON.stringify({ name: "x", bot: "Assistant", task: "y", every: "now and then" }),
+        })
+      ).status,
+    ).toBe(409);
+
+    const paused = (await (
+      await api(`/routines/${r.id}`, { method: "PATCH", body: JSON.stringify({ status: "paused", quiet: true }) })
+    ).json()) as {
+      status: string;
+      quiet: boolean;
+    };
+    expect(paused).toMatchObject({ status: "paused", quiet: true });
+    expect(((await (await api("/routines")).json()) as unknown[]).length).toBe(1);
+
+    await finished(1, async () => {
+      expect((await api(`/routines/${r.id}/run`, { method: "POST", body: "{}" })).status).toBe(202);
+    });
+    const detail = (await (await api(`/routines/${r.id}`)).json()) as { runs: { state: string }[] };
+    expect(detail.runs).toHaveLength(1);
+    const listed = (await (await api("/runs")).json()) as ApiRun[];
+    expect(listed[0]).toMatchObject({ trigger: "routine", routineName: "Morning brief" });
+
+    const preview = await api(`/schedule?every=${encodeURIComponent("every 30 minutes")}`);
+    expect(await preview.json()).toMatchObject({ scheduleText: "Every 30 minutes" });
+    const bad = await api(`/schedule?every=${encodeURIComponent("whenever")}`);
+    expect(bad.status).toBe(400);
+    expect(((await bad.json()) as { error: string }).error).toContain("Try");
+
+    expect((await api(`/routines/${r.id}`, { method: "DELETE" })).status).toBe(200);
+    expect(((await (await api("/routines")).json()) as unknown[]).length).toBe(0);
+  });
+
+  test("a chat message that asks for a routine makes one, and says so", async () => {
+    const r = await api("/bots/bot_assistant/messages", {
+      method: "POST",
+      body: JSON.stringify({ text: "Every weekday at 07:30, brief me on what changed" }),
+    });
+    expect(r.status).toBe(201);
+    const routines = (await (await api("/routines")).json()) as { name: string; task: string; scheduleText: string }[];
+    expect(routines).toEqual([
+      expect.objectContaining({ task: "brief me on what changed", scheduleText: "Weekdays at 07:30" }),
+    ]);
+    const chat = (await (await api("/bots/bot_assistant/messages")).json()) as ApiChatMessage[];
+    expect(chat.map((m) => m.role)).toEqual(["you", "bot"]);
+    expect(chat[1]?.text).toContain("I'll do that weekdays at 07:30");
+    expect((await (await api("/runs")).json()) as unknown[]).toEqual([]); // nothing ran now
+  });
+
+  test("settings, and the daily summary on demand", async () => {
+    const put = await api("/routine-settings", {
+      method: "PUT",
+      body: JSON.stringify({ summaryAt: "19:30", quiet: { from: "22:00", to: "07:00" }, missed: "skip" }),
+    });
+    expect(await put.json()).toMatchObject({
+      summaryAt: "19:30",
+      quiet: { from: "22:00", to: "07:00" },
+      missed: "skip",
+      subscriptions: false,
+    });
+    expect((await api("/routine-settings", { method: "PUT", body: JSON.stringify({ summaryAt: "7pm" }) })).status).toBe(
+      422,
+    );
+    await finished(1, async () => {
+      await api("/runs", { method: "POST", body: JSON.stringify({ goal: "write NOTES.md" }) });
+    });
+    const sum = (await (await api("/summary-now", { method: "POST", body: "{}" })).json()) as { text: string };
+    expect(sum.text).toContain("Your day: 1 task done");
+  });
+});
+
 describe("what the API does", () => {
   test("me: your name for the sidebar", async () => {
     const me = (await (await api("/me")).json()) as { name: string };

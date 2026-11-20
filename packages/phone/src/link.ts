@@ -41,7 +41,7 @@ export interface PhoneLinkOptions {
   pollTimeoutSec?: number;
 }
 
-type Kind = "approval" | "finished" | "failed" | "review";
+type Kind = "approval" | "finished" | "failed" | "review" | "summary";
 
 export class PhoneLink {
   private running = false;
@@ -230,6 +230,7 @@ export class PhoneLink {
       await this.sendApprovals();
       await this.closeCards();
       await this.sendResults();
+      await this.sendSummaries();
     } catch (e) {
       this.o.log?.(`phone: ${(e as Error).message}`);
     } finally {
@@ -329,11 +330,21 @@ export class PhoneLink {
     const rows = this.withDb((db) =>
       db
         .query<
-          { id: string; state: string; goal: string; summary: string | null; error: string | null; bot: string },
+          {
+            id: string;
+            state: string;
+            goal: string;
+            summary: string | null;
+            error: string | null;
+            bot: string;
+            routine: string | null;
+            quiet: number;
+          },
           [number, number]
         >(
-          `SELECT r.id, r.state, r.goal, r.summary, r.error, COALESCE(g.name, 'A bot') AS bot
-           FROM runs r LEFT JOIN agents g ON g.id = r.agent_id
+          `SELECT r.id, r.state, r.goal, r.summary, r.error, COALESCE(g.name, 'A bot') AS bot,
+                  t.name AS routine, COALESCE(t.quiet, 0) AS quiet
+           FROM runs r LEFT JOIN agents g ON g.id = r.agent_id LEFT JOIN routines t ON t.id = r.routine_id
            WHERE r.finished_at > ? AND r.finished_at <= ? AND r.state IN ('REVIEWING','SUCCEEDED','KEPT','FAILED')
              AND NOT EXISTS (SELECT 1 FROM phone_messages p WHERE p.ref_id = r.id AND p.kind IN ('finished','failed','review'))
            ORDER BY r.finished_at`,
@@ -342,8 +353,14 @@ export class PhoneLink {
     );
     for (const r of rows) {
       const kind: Kind = r.state === "FAILED" ? "failed" : r.state === "REVIEWING" ? "review" : "finished";
+      const bot = r.routine ? `${r.bot}, ${r.routine}` : r.bot;
+      // A quiet routine ("message me only if something needs me") sends no news of a job well done.
+      if (r.quiet === 1 && kind === "finished") {
+        this.record(kind, r.id, null, "");
+        continue;
+      }
       let text: string | null;
-      if (this.c.notify === "needs-you") text = kind === "review" ? reviewOnlyText(r.bot) : null;
+      if (this.c.notify === "needs-you") text = kind === "review" ? reviewOnlyText(bot) : null;
       else {
         let changes: Changes | undefined;
         if (r.state === "REVIEWING" || r.state === "KEPT") {
@@ -352,7 +369,7 @@ export class PhoneLink {
             changes = { added: c.added, modified: c.modified, deleted: c.deleted };
           } catch {}
         }
-        const info = { bot: r.bot, goal: r.goal, summary: r.summary, error: r.error, state: r.state, changes };
+        const info = { bot, goal: r.goal, summary: r.summary, error: r.error, state: r.state, changes };
         text = kind === "failed" ? failedText(info) : finishedText(info);
       }
       if (text === null) {
@@ -361,6 +378,28 @@ export class PhoneLink {
       }
       const msg = await this.tg.sendMessage(this.c.chatId, text);
       this.record(kind, r.id, msg.message_id, text);
+    }
+  }
+
+  /** The daily summary (M6), as it was written to your main bot's chat; not in "only what needs you". */
+  private async sendSummaries(): Promise<void> {
+    const rows = this.withDb((db) =>
+      db
+        .query<{ id: string; text: string }, [number]>(
+          `SELECT m.id, m.text FROM messages m
+           WHERE m.role = 'bot' AND m.created_at > ? AND m.data_json LIKE '%"kind":"summary"%'
+             AND NOT EXISTS (SELECT 1 FROM phone_messages p WHERE p.kind = 'summary' AND p.ref_id = m.id)
+           ORDER BY m.created_at`,
+        )
+        .all(this.c.pairedAt),
+    );
+    for (const m of rows) {
+      if (this.c.notify === "needs-you") {
+        this.record("summary", m.id, null, "");
+        continue;
+      }
+      const msg = await this.tg.sendMessage(this.c.chatId, m.text);
+      this.record("summary", m.id, msg.message_id, m.text);
     }
   }
 }

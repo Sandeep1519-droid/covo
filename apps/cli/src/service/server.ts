@@ -3,7 +3,15 @@ import { dirname } from "node:path";
 import { API_PORT } from "@covo/api";
 import { covoPaths, VERSION } from "@covo/core";
 import { openDb } from "@covo/db";
-import { isPaused, RunError, type RunEvent, type RunSummary, recoverStaleRuns, startRun } from "@covo/engine";
+import {
+  getRoutine,
+  isPaused,
+  RunError,
+  type RunEvent,
+  type RunSummary,
+  recoverStaleRuns,
+  startRun,
+} from "@covo/engine";
 import { currentCapacity } from "../commands/profile.ts";
 import type { Ctx } from "../main.ts";
 import { type Prepared, PrepareError, prepareRun, type RunHeader, type RunRequest } from "../runner.ts";
@@ -11,6 +19,7 @@ import { json as apiJson, handleApi } from "./api.ts";
 import { serviceHealth, socketPath } from "./client.ts";
 import { apiToken, Gate } from "./gate.ts";
 import { PhoneManager } from "./phone.ts";
+import { RoutineScheduler } from "./routines.ts";
 import { defaultUiDir, uiFile } from "./ui.ts";
 
 // covod, Covo's background service (Phase 3 M0). One process runs every bot task, so a task
@@ -29,6 +38,8 @@ export type ServiceMessage =
   | { type: "error"; job: string; message: string }
   /** All bots were paused or resumed. */
   | { type: "paused"; paused: boolean }
+  /** Something else changed that the app shows (a daily summary, a routine). */
+  | { type: "changed"; what: string }
   /** Sent every few seconds so a long, quiet model step doesn't look like a dead connection. */
   | { type: "ping" };
 
@@ -49,6 +60,8 @@ const PING_MS = 5_000;
 let jobSeq = 0;
 
 export class Service {
+  /** Starts routines on time and makes the daily summary (set by serve()). */
+  scheduler?: RoutineScheduler;
   private readonly jobs: Job[] = [];
   private readonly watchers = new Set<(m: ServiceMessage) => void>();
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -293,6 +306,10 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
   // Your phone (M5): while one is connected, the service listens to Telegram and sends updates.
   const phone = new PhoneManager(ctx, service);
   phone.start();
+  // Routines and the daily summary (M6).
+  const scheduler = new RoutineScheduler(ctx, service);
+  service.scheduler = scheduler;
+  scheduler.start();
   const wanted = ctx.env.COVO_PORT !== undefined ? Number(ctx.env.COVO_PORT) : API_PORT;
   const gate = new Gate(apiToken(ctx.home), wanted, ctx.now);
   const uiDir = ctx.env.COVO_UI_DIR ?? defaultUiDir();
@@ -386,6 +403,16 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
           ? json({ stopped: true })
           : json({ error: "No such task is running." }, 404);
       }
+      const routine = path.match(/^\/routines\/([\w-]+)\/run$/);
+      if (req.method === "POST" && routine) {
+        try {
+          const r = getRoutine(ctx.home, routine[1] as string, ctx.now);
+          const job = await scheduler.launch(r, { manual: true });
+          return json({ job });
+        } catch (e) {
+          return json({ error: (e as Error).message }, 422);
+        }
+      }
       if (req.method === "GET" && path === "/events") return ndjson((send) => service.watch(send));
       if (req.method === "POST" && path === "/pair-code") {
         // Only over the private socket: whoever can open it is you.
@@ -405,6 +432,7 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
     gate,
     recovered,
     async close() {
+      scheduler.stop();
       await phone.stop();
       await service.shutdown();
       server.stop(true);

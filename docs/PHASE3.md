@@ -1,6 +1,6 @@
 # Phase 3 Plan: The App and Your Phone
 
-> Status: **in progress** (M0–M5 done), 19 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
+> Status: **in progress** (M0–M6 done), 20 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
 
 ## 1. Goal
 
@@ -126,7 +126,22 @@ Covo stays local. Nothing listens beyond your own Mac, and every request to the 
   - the test card's Allow once was answered and the card updated.
   
   A real spending pause needs a paid model; that path is covered by the tests.) | 4 days |
-| **M6** | **Routines and the daily summary.** Commands: `covo routines add "Inbox tidy" --bot <name> --every "weekdays 9:00" "<task>"`, plus `list`, `pause` and `remove`, and the same in the app. The service runs them on time, and a run missed while the Mac slept happens once when it wakes (or is skipped, your choice). Quiet hours, and no new routine runs when memory is critically low (power profile). A daily summary at a time you pick, in the app and on your phone, covers what ran, what changed (with Undo), what was spent and what's waiting. | A routine set for 2 minutes from now runs by itself; the daily summary lists it | 3–4 days |
+| **M6** | **Routines and the daily summary.** Commands: `covo routines add "Inbox tidy" --bot <name> --every "weekdays 9:00" "<task>"`, plus `list`, `pause` and `remove`, and the same in the app. The service runs them on time, and a run missed while the Mac slept happens once when it wakes (or is skipped, your choice). Quiet hours, and no new routine runs when memory is critically low (power profile). A daily summary at a time you pick, in the app and on your phone, covers what ran, what changed (with Undo), what was spent and what's waiting. | A routine set for 2 minutes from now runs by itself; the daily summary lists it (done:
+- **Shape:** migration 0008 adds `routines` and links each run to its routine. `packages/engine` holds the schedule reader, the routines and the daily summary. Covo's service checks for due routines every 15 seconds.
+- **Schedules** are plain words: "weekdays 9:00", "every day at 7:30 and 18:00", "mon, wed and fri at 8:30", "hourly", "every 30 minutes" (at most every 5 minutes). Anything else gets examples to copy.
+- **Commands:** `covo routines add "Inbox tidy" --bot <name> --every "weekdays 9:00" "<task>"` (also `--model`, `--limit`, `--quiet`), `list`, `show`, `pause`, `resume`, `remove` and `run` (now, as a test). Settings: `missed run-once|skip`, `quiet 22:00-07:00|off`, `subscriptions on|off`. `covo summary` says when it's made; also `at 18:00`, `off` and `now`.
+- **In the app:**
+  - a bot's Details panel (the icon in its chat's header), with About and Routines (Figma B4);
+  - the routine editor (B5): when (with what it means as you type), what to do, limit per run, model, "Message me only if something needs me", the last runs, and Delete, Pause, Test now and Save;
+  - routine runs show in the bot's chat as "Routine: <name>";
+  - **More** lists every routine, with the settings and "Make a summary now";
+  - asking in a chat, like "every Monday at 9, summarise last week", makes the routine and says so. Nothing runs right away.
+- **Running on time:**
+  - A routine missed while the Mac slept runs once when it wakes, not once per missed time, or is skipped if you choose. Either way it's in the activity log (`routine.skipped`).
+  - Nothing new starts while all bots are paused, in quiet hours, or when memory is critically low: a due routine waits. One still running from last time isn't started again.
+  - Routines never use command-line subscriptions (Claude Code) unless you turn that on. Otherwise the bot's next model, or the free local one, does the work.
+- **Daily summary:** at the time you pick (18:00 to start with), in your main bot's chat. It covers what ran since the last one, what changed (with Undo), what was spent against the daily limit and what's waiting. It goes to your phone too, short and never with file contents, unless the phone is set to only what needs you. A quiet routine's "finished" message isn't sent to the phone.
+- **Verified** with 22 new tests (schedules, routines, the service running them on time, missed runs, pauses and quiet hours, subscriptions, the summary, the API, the commands and the phone). Also live on a throwaway service: a routine made in the app for 2 minutes later ran by itself, and the summary listed it.) | 3–4 days |
 | **M7** | **Demo, docs and safety check.** The acceptance demo below and README updates. Attack tests:<br>• a web page tries to call the service (cross-site request, DNS rebinding)<br>• requests with a missing or wrong token<br>• a Telegram message from a stranger<br>• a replayed or edited approval<br>• a run that tries to read the service token.<br>All are refused and logged. | The acceptance demo passes end to end | 2–3 days |
 
 Total: about **4–5 weeks** part-time.

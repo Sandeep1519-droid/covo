@@ -10,6 +10,7 @@ import type {
   ApiPause,
   ApiProfile,
   ApiProvider,
+  ApiRoutineSettings,
   ApiRun,
   ApiRunDetail,
   ApiStep,
@@ -20,32 +21,46 @@ import type {
 import { covoPaths, VERSION } from "@covo/core";
 import { openDb, verifyAudit } from "@covo/db";
 import {
+  addBotMessage,
   addMessage,
+  addRoutine,
   archiveBot,
   type Bot,
   type ChatMessage,
   changesOf,
   createBot,
   decide,
+  describeSchedule,
   discardRun,
   failMessage,
+  getRoutine,
   isPaused,
   keepRun,
   linkRun,
   listBots,
   listMessages,
+  listRoutines,
+  nextRun,
+  parseSchedule,
   pauseState,
+  postSummary,
   RunError,
+  removeRoutine,
   reviewRun,
+  routineFromChat,
+  routineRuns,
+  ScheduleError,
   setPaused,
   startOfLocalDay,
   undoRun,
   updateBot,
+  updateRoutine,
 } from "@covo/engine";
 import {
   addConnection,
   engineById,
   getLimits,
+  getRoutineSettings,
   listModelsFor,
   loadSettings,
   ModelConfigError,
@@ -55,6 +70,7 @@ import {
   removeConnection,
   setDefault,
   setLimits,
+  setRoutineSettings,
 } from "@covo/models";
 import { SecretError, secrets } from "@covo/platform";
 import { UndoError } from "@covo/sandbox";
@@ -133,10 +149,13 @@ type RunRow = {
   created_at: number;
   started_at: number | null;
   finished_at: number | null;
+  routine_id: string | null;
+  routine_name: string | null;
 };
 const RUN_SELECT = `SELECT r.id, r.state, r.goal, r.agent_id, a.name AS bot_name, r.model, r.trigger, r.cost_usd,
-  r.tokens_in, r.tokens_out, r.summary, r.error, r.created_at, r.started_at, r.finished_at
-  FROM runs r LEFT JOIN agents a ON a.id = r.agent_id`;
+  r.tokens_in, r.tokens_out, r.summary, r.error, r.created_at, r.started_at, r.finished_at,
+  r.routine_id, t.name AS routine_name
+  FROM runs r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN routines t ON t.id = r.routine_id`;
 const toRun = (r: RunRow): ApiRun => ({
   id: r.id,
   state: r.state,
@@ -153,6 +172,8 @@ const toRun = (r: RunRow): ApiRun => ({
   createdAt: r.created_at,
   startedAt: r.started_at,
   finishedAt: r.finished_at,
+  routineId: r.routine_id,
+  routineName: r.routine_name,
 });
 
 function findRunId(db: Database, arg: string): string {
@@ -298,8 +319,21 @@ const toMessage = (m: ChatMessage): ApiChatMessage => ({
   runId: m.runId,
   model: m.model,
   error: m.error,
+  data: m.data,
   createdAt: m.createdAt,
 });
+
+const clipName = (task: string) => {
+  const t = task.replace(/\s+/g, " ").trim();
+  return t.length > 40 ? `${t.slice(0, 39).trimEnd()}…` : t;
+};
+
+/** "Brief me", then "Brief me (2)": routine names are unique. */
+function uniqueRoutineName(ctx: Ctx, base: string): string {
+  const taken = new Set(listRoutines(ctx.home, { now: ctx.now }).map((r) => r.name.toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let i = 2; ; i++) if (!taken.has(`${base} (${i})`.toLowerCase())) return `${base} (${i})`;
+}
 
 /**
  * Saves your message and starts its task with the last few turns as context. If the task can't
@@ -316,6 +350,28 @@ export async function sendMessage(
 ): Promise<ApiChatMessage> {
   if (typeof b.text !== "string" || !b.text.trim()) throw new HttpError(400, "Write a message first.");
   const model = typeof b.model === "string" && b.model ? b.model : undefined;
+  const asked = by === "session" || from === undefined ? routineFromChat(b.text) : null;
+  if (asked) {
+    const name = clipName(asked.task);
+    const routine = addRoutine(
+      ctx.home,
+      { name: uniqueRoutineName(ctx, name), bot, task: asked.task, every: asked.every, ...(model ? { model } : {}) },
+      ctx.now,
+    );
+    const mine = addMessage(ctx.home, bot, b.text, { now: ctx.now, data: { kind: "routine", routineId: routine.id } });
+    const first = routine.nextAt ? new Date(routine.nextAt) : null;
+    addBotMessage(
+      ctx.home,
+      bot,
+      `OK: I'll do that ${routine.scheduleText.charAt(0).toLowerCase()}${routine.scheduleText.slice(1)}` +
+        `${first ? `, starting ${first.toLocaleDateString("en-GB", { weekday: "long" })} at ${String(first.getHours()).padStart(2, "0")}:${String(first.getMinutes()).padStart(2, "0")}` : ""}.` +
+        ` It's the routine "${routine.name}"; change or pause it in my details.`,
+      { kind: "routine-made", routineId: routine.id },
+      ctx.now,
+    );
+    service.announce({ type: "changed", what: "routine" });
+    return toMessage(mine.message);
+  }
   const {
     message,
     bot: found,
@@ -340,6 +396,25 @@ export async function sendMessage(
     failMessage(ctx.home, message.id, e.message, ctx.now);
     return toMessage({ ...message, error: e.message });
   }
+}
+
+/** The routine fields a request may set, checked for type (the engine checks the rest). */
+function routineFields(b: Record<string, unknown>, isNew: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of ["name", "bot", "task", "every"]) {
+    if (k in b) {
+      if (typeof b[k] !== "string") throw new HttpError(400, `${k} must be text.`);
+      out[k] = b[k];
+    } else if (isNew) throw new HttpError(400, `A routine needs ${k === "every" ? "a schedule (every)" : `a ${k}`}.`);
+  }
+  if ("model" in b) out.model = typeof b.model === "string" && b.model ? b.model : null;
+  if ("runLimitUsd" in b) {
+    if (!isLimit(b.runLimitUsd)) throw new HttpError(400, "runLimitUsd must be a dollar amount of 0 or more, or null.");
+    out.runLimitUsd = b.runLimitUsd;
+  }
+  if ("quiet" in b) out.quiet = b.quiet === true;
+  if (!isNew && (b.status === "active" || b.status === "paused")) out.status = b.status;
+  return out;
 }
 
 function pauseInfo(ctx: Ctx, service: Service): ApiPause {
@@ -545,6 +620,68 @@ export async function handleApi(
       if (m === "GET" || m === "POST") return json(pauseInfo(ctx, service));
     }
     if (m === "GET" && a === "summary" && !id) return json(summary(ctx, service));
+
+    // Routines and the daily summary (M6)
+    if (a === "routines") {
+      if (m === "GET" && !id) {
+        const bot = url.searchParams.get("bot");
+        return json(listRoutines(ctx.home, { now: ctx.now, ...(bot ? { bot } : {}) }));
+      }
+      if (m === "POST" && !id) {
+        const b = await body<Record<string, unknown>>(req);
+        const r = addRoutine(ctx.home, routineFields(b, true) as never, ctx.now);
+        service.announce({ type: "changed", what: "routine" });
+        return json(r, 201);
+      }
+      if (id && m === "GET" && !action) {
+        const r = getRoutine(ctx.home, id, ctx.now);
+        return json({ ...r, runs: routineRuns(ctx.home, r.id, 10, ctx.now) });
+      }
+      if (id && m === "PATCH" && !action) {
+        const r = updateRoutine(ctx.home, id, routineFields(await body(req), false) as never, ctx.now);
+        service.announce({ type: "changed", what: "routine" });
+        return json(r);
+      }
+      if (id && m === "DELETE" && !action) {
+        const r = removeRoutine(ctx.home, id, ctx.now);
+        service.announce({ type: "changed", what: "routine" });
+        return json(r);
+      }
+      if (id && m === "POST" && action === "run") {
+        if (!service.scheduler) throw new HttpError(503, "Covo's scheduler isn't running.");
+        const job = await service.scheduler.launch(getRoutine(ctx.home, id, ctx.now), { manual: true });
+        return json({ job }, 202);
+      }
+    }
+    if (a === "schedule" && m === "GET" && !id) {
+      // For the routine editor: what a schedule means, and when it would run next.
+      const every = url.searchParams.get("every") ?? "";
+      try {
+        const sch = parseSchedule(every);
+        return json({ scheduleText: describeSchedule(sch), nextAt: nextRun(sch, ctx.now()) });
+      } catch (e) {
+        if (e instanceof ScheduleError) throw new HttpError(400, e.message);
+        throw e;
+      }
+    }
+    if (a === "routine-settings" && !id) {
+      if (m === "PUT") {
+        const b = await body<Record<string, unknown>>(req);
+        const changes: Partial<ApiRoutineSettings> = {};
+        if (b.missed === "run-once" || b.missed === "skip") changes.missed = b.missed;
+        if ("quiet" in b) changes.quiet = (b.quiet ?? null) as ApiRoutineSettings["quiet"];
+        if ("summaryAt" in b) changes.summaryAt = (b.summaryAt ?? null) as string | null;
+        if (typeof b.subscriptions === "boolean") changes.subscriptions = b.subscriptions;
+        return json(setRoutineSettings(ctx.home, changes));
+      }
+      if (m === "GET") return json(getRoutineSettings(ctx.home));
+    }
+    if (a === "summary-now" && m === "POST" && !id) {
+      const text = service.scheduler
+        ? service.scheduler.summaryNow()
+        : postSummary(ctx.home, { now: ctx.now, dayLimitUsd: getLimits(ctx.home).dayUsd }).text;
+      return json({ text });
+    }
     if (a === "session" && m === "DELETE") {
       gate.endSession(req);
       return json({ ok: true }, 200, { "set-cookie": `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0` });

@@ -1,6 +1,17 @@
 // What the app knows, and the small rules for showing it.
 
-import type { ApiApproval, ApiBot, ApiMe, ApiModel, ApiPause, ApiRun, ApiUsage, Level, RunState } from "@covo/api";
+import type {
+  ApiApproval,
+  ApiBot,
+  ApiMe,
+  ApiModel,
+  ApiPause,
+  ApiRoutine,
+  ApiRun,
+  ApiUsage,
+  Level,
+  RunState,
+} from "@covo/api";
 
 export interface Data {
   me: ApiMe;
@@ -10,6 +21,7 @@ export interface Data {
   approvals: ApiApproval[];
   usage: ApiUsage;
   pause: ApiPause;
+  routines: ApiRoutine[];
 }
 
 export type SettingsTab = "general" | "models" | "spending" | "computer";
