@@ -1680,7 +1680,7 @@ Update (2026-11-20): the window has a **translucent frame**. The frame is made o
 - the icon rail;
 - a thin edge on the right and bottom.
 
-Inside the frame sits one solid, rounded panel with the sidebar and the content. In the Mac app the frame is the system's own window material (`NSVisualEffectView`, behind-window), so the desktop shows through softly. The top strip is a native toolbar, centred with the window buttons. In a browser the same layout gets a solid frame colour (`--color-bg-frame`). New tokens: `--color-bg-frame`, `--color-frame-hover`, `--color-panel-edge` and `--radius-panel`. The Figma screens still show the earlier frame, with the window buttons inside the sidebar.
+Inside the frame sits one solid, rounded panel with the sidebar and the content. In the Mac app the frame is the system's own window material (`NSVisualEffectView`, behind-window), so the desktop shows through softly. The top strip is a native toolbar, centred with the window buttons. In a browser the same layout gets a solid frame colour (`--color-bg-frame`). New tokens: `--color-bg-frame`, `--color-frame-hover`, `--color-panel-edge` and `--radius-panel`. The Figma screens were updated to match on 2026-11-20 (both pages, with the new variables and a "Top strip" component).
 
 ### ADR-007 — Name: Covo Bot (2026-11-18)
 

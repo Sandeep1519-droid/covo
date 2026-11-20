@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { covoPaths } from "@covo/core";
 import { appendAudit, migrate, openDb } from "@covo/db";
-import { changesOf, decide, startOfLocalDay, usd } from "@covo/engine";
+import { changesOf, decide, startOfLocalDay } from "@covo/engine";
 import { type PhoneConfig, readOffset, writeOffset } from "./config.ts";
 import {
   approvalButtons,
@@ -10,6 +10,7 @@ import {
   failedText,
   finishedText,
   helpText,
+  money,
   outcomeText,
   reviewOnlyText,
 } from "./format.ts";
@@ -173,7 +174,7 @@ export class PhoneLink {
         db
           .query<{ c: number | null }, [number]>("SELECT SUM(usd) AS c FROM budget_ledger WHERE ts >= ?")
           .get(startOfLocalDay(this.now()))?.c ?? 0;
-      return [`Running: ${running}`, `Waiting for you: ${waiting}`, `Spent today: ${usd(spent)}`].join("\n");
+      return [`Running: ${running}`, `Waiting for you: ${waiting}`, `Spent today: ${money(spent)}`].join("\n");
     });
   }
 

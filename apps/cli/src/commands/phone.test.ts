@@ -56,7 +56,7 @@ describe("covo phone", () => {
     expect(loadPhone(home)).toMatchObject({ chatId: CHAT, userId: ME.id, notify: "summaries", tasks: false });
     expect(statSync(phonePath(home)).mode & 0o777).toBe(0o600);
     expect(JSON.stringify(loadPhone(home))).not.toContain(TOKEN); // never in a file
-    expect(tg.sent[0]?.text).toContain("Connected to Covo on your Mac");
+    expect(tg.sent[0]?.text).toContain("You're connected to Covo on your Mac. I'll message you here when:");
 
     expect((await main(["phone", "status"], env(), extra())).out).toContain("chatting with Sandeep");
     expect((await main(["phone", "notify", "needs-you"], env(), extra())).out).toContain("only what needs you");

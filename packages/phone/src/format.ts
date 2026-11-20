@@ -10,7 +10,7 @@ export const clip = (s: string, n: number): string => {
   return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
 };
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+export const money = (n: number) => (n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
 const two = (n: number) => String(n).padStart(2, "0");
 const clock = (t: number) => {
   const d = new Date(t);
@@ -137,9 +137,9 @@ export function failedText(r: RunInfo): string {
   return [r.bot, `Couldn't finish: ${clip(r.goal, 120)}`, clip(r.error ?? "Something went wrong.", 240)].join("\n");
 }
 
-export function helpText(c: PhoneConfig): string {
+export function helpText(c: PhoneConfig, intro = "This is Covo, on your Mac. I'll message you here when:"): string {
   return [
-    "This is Covo, on your Mac. I'll message you here when:",
+    intro,
     "• a task needs your OK to spend more: tap Allow once or Deny",
     c.notify === "summaries"
       ? "• a task finishes or fails (a short summary, never your files' contents)"

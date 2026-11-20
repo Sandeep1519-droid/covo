@@ -155,7 +155,9 @@ async function connect(ctx: Ctx): Promise<CliResult> {
   writeOffset(ctx.home, paired.offset);
   savePhone(ctx.home, config);
   audit(ctx, "phone.connected", { bot, name: paired.name });
-  await tg.sendMessage(config.chatId, `Connected to Covo on your Mac.\n\n${helpText(config)}`).catch(() => {});
+  await tg
+    .sendMessage(config.chatId, helpText(config, "You're connected to Covo on your Mac. I'll message you here when:"))
+    .catch(() => {});
   const running = await serviceHealth(ctx.home);
   return {
     code: 0,

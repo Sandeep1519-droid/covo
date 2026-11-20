@@ -255,7 +255,7 @@ describe("results and messages", () => {
     await say("/start");
     expect(tg.sent.at(-1)?.text).toContain("This is Covo, on your Mac");
     await say("/status");
-    expect(tg.sent.at(-1)?.text).toContain("Waiting for you: 0");
+    expect(tg.sent.at(-1)?.text).toBe("Running: 0\nWaiting for you: 0\nSpent today: $0.00");
     await say("tidy my downloads");
     expect(started).toEqual([]);
     expect(tg.sent.at(-1)?.text).toContain("covo phone tasks on");
