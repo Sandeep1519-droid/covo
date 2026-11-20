@@ -7,17 +7,7 @@ import { needsYou } from "./NeedsYou.tsx";
 export const LATER = "Arrives in a later update";
 
 /** Figma "Chat sidebar": Needs you, Library, the pinned main bot, then a section per department. */
-export function Sidebar({
-  data,
-  view,
-  go,
-  onHide,
-}: {
-  data: Data;
-  view: View;
-  go: (v: View) => void;
-  onHide: () => void;
-}) {
+export function Sidebar({ data, view, go }: { data: Data; view: View; go: (v: View) => void }) {
   const bots = data.bots.filter((b) => b.status !== "archived");
   const pinned = bots.filter((b) => b.id === MAIN_BOT);
   const sections = new Map<string, ApiBot[]>();
@@ -58,25 +48,6 @@ export function Sidebar({
 
   return (
     <aside className="sidebar" aria-label="Bots">
-      <div className="sidebar-top">
-        <button type="button" className="icon-btn" aria-label="Back" title="Back" onClick={() => history.back()}>
-          <Icon name="back" />
-        </button>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="Forward"
-          title="Forward"
-          onClick={() => history.forward()}
-        >
-          <Icon name="forward" />
-        </button>
-        <span className="grow" />
-        <button type="button" className="icon-btn" aria-label="Hide sidebar" title="Hide sidebar" onClick={onHide}>
-          <Icon name="panel" />
-        </button>
-      </div>
-
       <div className="workspace">
         <span className="t-title-l">Covo Bot</span>
         <Icon name="chevron-lg" />

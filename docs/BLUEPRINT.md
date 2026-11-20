@@ -1675,6 +1675,13 @@ Design source: Figma file "Covo App Design" (pages `Screens` = dark, `Screens ·
 
 Update (2026-11-17): both themes are monochrome (white primary buttons on dark, black on light) with neutral greys and no blue tint. The shell follows a Codex-style layout: window controls, a left icon rail (Home, Needs you, Library, More, Settings), a sidebar panel with a workspace switcher and "New bot", and a message box with a section tab, "Ask for approval" chip and model picker. Bot creation is a full-screen view: large 3D-shaded avatar, 18 colours, 12 shapes, name, purpose, model, Create, and suggestions.
 
+Update (2026-11-20): the window has a **translucent frame**. The frame is made of three parts:
+- the top strip, with the window buttons, back, forward and the sidebar switch;
+- the icon rail;
+- a thin edge on the right and bottom.
+
+Inside the frame sits one solid, rounded panel with the sidebar and the content. In the Mac app the frame is the system's own window material (`NSVisualEffectView`, behind-window), so the desktop shows through softly. The top strip is a native toolbar, centred with the window buttons. In a browser the same layout gets a solid frame colour (`--color-bg-frame`). New tokens: `--color-bg-frame`, `--color-frame-hover`, `--color-panel-edge` and `--radius-panel`. The Figma screens still show the earlier frame, with the window buttons inside the sidebar.
+
 ### ADR-007 — Name: Covo Bot (2026-11-18)
 
 The product is **Covo Bot**, replacing the codename Coworker. "Covo" is Italian for a den or hideout, matching the core promise: bots work in a safe, sealed copy and nothing leaves without your OK. Short forms: command `covo`, daemon `covod`, packages `@covo/*`, data folder `~/Covo`, settings `COVO_*`. The npm name `covo` was free on 2026-11-18. Before launch, run a trademark search (USPTO, WIPO Global Brand Database) and pick a domain.

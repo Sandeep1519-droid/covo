@@ -5,6 +5,7 @@ import { auditForRun, openDb } from "@covo/db";
 import {
   approvalStreak,
   decide,
+  isPaused,
   RunError,
   type RunEvent,
   type RunSummary,
@@ -100,6 +101,7 @@ async function finishLines(ctx: Ctx, r: RunSummary, header: RunHeader): Promise<
 }
 
 async function runHere(ctx: Ctx, req: RunRequest): Promise<CliResult> {
+  if (isPaused(ctx.home)) return { code: 1, out: "All bots are paused. Resume them with: covo resume\n" };
   let prepared: Prepared;
   try {
     prepared = await prepareRun(ctx, req);

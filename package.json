@@ -17,7 +17,9 @@
     "check": "bun run lint && bun run typecheck && bun test",
     "covo": "bun apps/cli/src/index.ts",
     "app:build": "bun apps/app/build.ts",
-    "app:dev": "bun apps/app/build.ts --watch"
+    "app:dev": "bun apps/app/build.ts --watch",
+    "mac:build": "bash apps/mac/build.sh",
+    "mac:test": "swift test --package-path apps/mac"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",

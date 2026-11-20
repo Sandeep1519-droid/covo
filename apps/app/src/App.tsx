@@ -1,7 +1,9 @@
-import type { ApiApproval, ApiBot, ApiEvent, ApiMe, ApiModel, ApiRun, ApiUsage } from "@covo/api";
+import type { ApiApproval, ApiBot, ApiEvent, ApiMe, ApiModel, ApiPause, ApiRun, ApiUsage } from "@covo/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiFail, api, listen, pair } from "./api.ts";
 import { BotChat } from "./components/BotChat.tsx";
+import { Icon } from "./components/Icon.tsx";
+import { MenuBar } from "./components/MenuBar.tsx";
 import { NeedsYou, needsYou } from "./components/NeedsYou.tsx";
 import { NewBot } from "./components/NewBot.tsx";
 import { Gatekeeper, Later } from "./components/Pages.tsx";
@@ -10,18 +12,20 @@ import { Review } from "./components/Review.tsx";
 import { SettingsWindow } from "./components/Settings.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { type Data, hashFor, type LiveStep, MAIN_BOT, type View, viewFromHash } from "./model.ts";
+import { inMacApp, reportDragRegions, reportTheme } from "./shell.ts";
 import { ThemeContext, useThemeState } from "./theme.ts";
 
 async function load(): Promise<Data> {
-  const [me, bots, models, runs, approvals, usage] = await Promise.all([
+  const [me, bots, models, runs, approvals, usage, pause] = await Promise.all([
     api<ApiMe>("/me"),
     api<ApiBot[]>("/bots"),
     api<ApiModel[]>("/models"),
     api<ApiRun[]>("/runs?limit=200"),
     api<ApiApproval[]>("/approvals"),
     api<ApiUsage>("/usage?days=1"),
+    api<ApiPause>("/pause"),
   ]);
-  return { me, bots, models, runs, approvals, usage };
+  return { me, bots, models, runs, approvals, usage, pause };
 }
 
 type Gate = "loading" | "expired" | "signed-out" | "down" | "ready";
@@ -70,9 +74,14 @@ export function App() {
   // Sign in with the one-time code from `covo app`, then drop it from the address.
   useEffect(() => {
     void (async () => {
-      const code = new URLSearchParams(location.hash.slice(1)).get("code");
+      const params = new URLSearchParams(location.hash.slice(1));
+      const code = params.get("code");
       if (code) {
-        history.replaceState(null, "", location.pathname);
+        // The Mac app can say which screen to open after signing in (e.g. "#/needs-you").
+        const to = params.get("to");
+        const next = to && viewFromHash(to) ? to : "";
+        history.replaceState(null, "", location.pathname + next);
+        if (next) setView(viewFromHash(next) as View);
         if (!(await pair(code))) setGate("expired");
       }
       await refresh();
@@ -137,6 +146,41 @@ export function App() {
     [data],
   );
 
+  // The Mac app's toolbar and menu bar panel call into the page through window.covo.
+  useEffect(() => {
+    (window as unknown as { covo: unknown }).covo = {
+      toggleSidebar: () => setSidebar((s) => !s),
+      setThemeChoice: (c: string) => {
+        if (c === "system" || c === "light" || c === "dark") choose(c);
+      },
+    };
+  }, [choose]);
+
+  // The Mac app matches its window frame and menu bar panel to the theme you pick here.
+  useEffect(() => {
+    reportTheme(choice);
+  }, [choice]);
+
+  // In the Mac app, tell it which parts of the window drag it, as a title bar would.
+  useEffect(() => {
+    if (!inMacApp() || view.name === "menubar") return;
+    const send = () => reportDragRegions();
+    const t = setTimeout(send, 50);
+    window.addEventListener("resize", send);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", send);
+    };
+  });
+
+  const resume = async () => {
+    try {
+      await api("/pause", { method: "POST", body: { paused: false } });
+    } finally {
+      void refresh();
+    }
+  };
+
   const signOut = async () => {
     try {
       await api("/session", { method: "DELETE" });
@@ -149,6 +193,14 @@ export function App() {
     return (
       <ThemeContext.Provider value={theme}>
         <Gatekeeper state={gate === "ready" ? "loading" : gate} />
+      </ThemeContext.Provider>
+    );
+  }
+
+  if (view.name === "menubar") {
+    return (
+      <ThemeContext.Provider value={theme}>
+        <MenuBar data={data} pause={data.pause} refresh={refresh} />
       </ThemeContext.Provider>
     );
   }
@@ -176,15 +228,49 @@ export function App() {
   return (
     <ThemeContext.Provider value={theme}>
       <div className="app">
-        <Rail view={view} waiting={needsYou(data).length} go={go} />
-        {sidebar ? (
-          <Sidebar data={data} view={sideView} go={go} onHide={() => setSidebar(false)} />
-        ) : (
-          <button type="button" className="show-sidebar" aria-label="Show sidebar" onClick={() => setSidebar(true)}>
-            ›
+        <header className="topbar">
+          <button type="button" className="icon-btn" aria-label="Back" title="Back" onClick={() => history.back()}>
+            <Icon name="back" />
           </button>
-        )}
-        <main className="main">{main}</main>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Forward"
+            title="Forward"
+            onClick={() => history.forward()}
+          >
+            <Icon name="forward" />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={sidebar ? "Hide sidebar" : "Show sidebar"}
+            title={sidebar ? "Hide sidebar" : "Show sidebar"}
+            onClick={() => setSidebar((s) => !s)}
+          >
+            <Icon name="panel" />
+          </button>
+        </header>
+        <Rail view={view} waiting={needsYou(data).length} go={go} />
+        <div className="frame-panel">
+          {sidebar && <Sidebar data={data} view={sideView} go={go} />}
+          <main className="main">
+            {data.pause.paused && (
+              <div className="paused-banner t-body-s" role="status">
+                <span className="grow">
+                  All bots are paused.
+                  {data.pause.queued
+                    ? ` ${data.pause.queued} task${data.pause.queued === 1 ? " is" : "s are"} waiting to start.`
+                    : " Nothing new starts until you resume."}
+                </span>
+                <button type="button" className="link" onClick={() => void resume()}>
+                  Resume all bots
+                </button>
+              </div>
+            )}
+            {main}
+          </main>
+        </div>
       </div>
       {view.name === "settings" && (
         <SettingsWindow

@@ -67,11 +67,43 @@ button:disabled,
   border-radius: var(--radius-md);
 }
 
-/* The window */
+/* The window: a frame (top bar and rail) around one rounded panel with the sidebar and the content.
+   In the Mac app the frame is the window's own translucent material and the top bar is native. */
 .app {
-  display: flex;
   height: 100vh;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
+  grid-template-areas:
+    "top top"
+    "rail content";
+  padding: 0 6px 6px 0;
+  background: var(--color-bg-frame);
   overflow: hidden;
+}
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 12px;
+}
+.topbar .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.topbar .icon-btn:hover {
+  background: var(--color-frame-hover);
+}
+.frame-panel {
+  grid-area: content;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  background: var(--color-bg-app);
+  box-shadow: 0 0 0 1px var(--color-panel-edge);
 }
 .main {
   flex: 1 0 0;
@@ -82,14 +114,12 @@ button:disabled,
 
 /* App rail */
 .rail {
-  width: 56px;
-  flex-shrink: 0;
-  background: var(--color-bg-surface);
+  grid-area: rail;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 56px 0 16px;
+  padding: 8px 0 10px;
 }
 .rail-item {
   width: 38px;
@@ -101,18 +131,11 @@ button:disabled,
 }
 .rail-item.on,
 .rail-item:hover {
-  background: var(--color-bg-hover);
+  background: var(--color-frame-hover);
 }
 /* The Needs you icon carries its badge; hide the badge when nothing is waiting. */
 .rail-needs-you.no-badge {
   clip-path: polygon(0 0, 26.6px 0, 26.6px 14px, 100% 14px, 100% 100%, 0 100%);
-}
-.show-sidebar {
-  width: 16px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-muted);
-  border-right: 1px solid var(--color-border-subtle);
-  text-align: center;
 }
 
 /* Chat sidebar */
@@ -126,13 +149,6 @@ button:disabled,
   flex-direction: column;
   gap: 2px;
   min-height: 0;
-}
-.sidebar-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 0 var(--space-8) var(--space-4);
-  min-height: 24px;
 }
 .workspace {
   display: flex;
@@ -1111,4 +1127,64 @@ fieldset.segmented {
   position: absolute;
   inset: 0;
   cursor: default;
+}
+
+/* ---- Phase 3 M4: the Mac app ---- */
+.paused-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin: var(--space-8) var(--space-8) 0;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
+  background: var(--color-status-warning-subtle);
+  color: var(--color-status-warning);
+}
+.paused-banner .link {
+  color: inherit;
+}
+.menubar {
+  background: var(--color-bg-raised);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+/* In a browser the page behind the panel matches it; the Mac app sizes its panel to the content. */
+body:has(.menubar) {
+  background: var(--color-bg-raised);
+}
+.menubar-row:hover {
+  background: var(--color-bg-hover);
+}
+.menubar-approval {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-12);
+  border-radius: var(--radius-lg);
+  background: var(--color-status-warning-subtle);
+}
+.menubar-paused {
+  color: var(--color-status-warning);
+}
+/* In the Mac app the window draws the frame (translucent) and the top bar (native toolbar). */
+:root[data-shell="mac"] body,
+:root[data-shell="mac"] .app,
+:root[data-shell="mac"] .menubar {
+  background: transparent;
+}
+:root[data-shell="mac"] .app {
+  grid-template-rows: 0 minmax(0, 1fr);
+}
+:root[data-shell="mac"] .topbar {
+  display: none;
+}
+:root[data-shell="mac"] body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+:root[data-shell="mac"] :is(input, textarea, .bubble, .bot-says-body p, .diff, .fact) {
+  user-select: text;
+  -webkit-user-select: text;
 }

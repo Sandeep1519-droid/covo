@@ -283,4 +283,35 @@ export type ApiEvent =
   | { type: "header"; job: string; header: unknown }
   | { type: "event"; job: string; event: { type: string; runId?: string; [k: string]: unknown } }
   | { type: "done"; job: string; summary: { runId: string; state: RunState; [k: string]: unknown } }
-  | { type: "error"; job: string; message: string };
+  | { type: "error"; job: string; message: string }
+  | { type: "paused"; paused: boolean };
+
+/** GET /api/pause, POST /api/pause { paused }: pausing all bots stops new tasks from starting. */
+export interface ApiPause {
+  paused: boolean;
+  since: number | null;
+  by: string | null;
+  /** Tasks waiting to start. */
+  queued: number;
+}
+
+/** GET /api/summary: what the menu bar shows. */
+export interface ApiSummary {
+  paused: boolean;
+  running: { runId: string; botId: string; botName: string; goal: string; startedAt: number | null }[];
+  queued: number;
+  /** Everything waiting on you: spending pauses and changes to review, newest first. */
+  waiting: {
+    id: string;
+    kind: "approval" | "changes";
+    runId: string;
+    botId: string;
+    botName: string;
+    title: string;
+    /** For approvals: answer with POST /api/approvals/:id and this hash. */
+    payloadHash?: string;
+    at: number;
+  }[];
+  todayUsd: number;
+  dayLimitUsd: number | null;
+}

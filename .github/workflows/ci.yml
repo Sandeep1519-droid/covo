@@ -22,3 +22,12 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun test
+
+  mac-app:
+    # Covo.app (apps/mac): build it and run its Swift tests.
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift build --package-path apps/mac
+      - run: swift test --package-path apps/mac

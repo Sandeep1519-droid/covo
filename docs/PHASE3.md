@@ -1,6 +1,6 @@
 # Phase 3 Plan: The App and Your Phone
 
-> Status: **in progress** (M0–M3 done), 19 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
+> Status: **in progress** (M0–M4 done), 19 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
 
 ## 1. Goal
 
@@ -78,8 +78,31 @@ Covo stays local. Nothing listens beyond your own Mac, and every request to the 
   - added a model with a test key;
   - `covo audit verify` passed;
   - both themes checked, no console errors.
-- **Not yet:** tasks started from the terminal don't appear in a chat (only in Needs you and Review). The Claude subscription is still connected from the terminal. "Always allow", Touch ID and "Stop for today" wait for Phase 4) | 6–7 days |
-| **M4** | **The Mac app.** `Covo.app` in SwiftUI:<br>• a **menu bar icon**: idle, working, or a count of things waiting for you<br>• **quick actions**: open Covo, pause all bots, the latest approval<br>• a **window** that shows the chat app (WKWebView, the system's own web engine; no copy of Chrome)<br>• **macOS notifications** when something needs you<br>• it **starts the service** if it isn't running.<br>Signed with your free Apple ID. | Quit Terminal; the menu bar shows "1 needs you" → click → approve | 4 days |
+- **Not yet:** tasks started from the terminal didn't appear in a chat (fixed in M4). The Claude subscription is still connected from the terminal. "Always allow", Touch ID and "Stop for today" wait for Phase 4) | 6–7 days |
+| **M4** | **The Mac app.** `Covo.app` in SwiftUI:<br>• a **menu bar icon**: idle, working, or a count of things waiting for you<br>• **quick actions**: open Covo, pause all bots, the latest approval<br>• a **window** that shows the chat app (WKWebView, the system's own web engine; no copy of Chrome)<br>• **macOS notifications** when something needs you<br>• it **starts the service** if it isn't running.<br>Signed with your free Apple ID. | Quit Terminal; the menu bar shows "1 needs you" → click → approve (done:
+- **Shape:** `apps/mac` is a Swift package with two parts:
+  - `CovoKit`: the API client, what the menu bar shows, and when to notify (tested with Swift Testing);
+  - the app: a SwiftUI `MenuBarExtra` plus an AppKit window.
+
+  The screens are the web app shown in `WKWebView` (no Chrome, no Electron). The window shows the chat app; the menu bar panel shows `/ui/#/menubar` (Figma X1). `bun run mac:build` makes `apps/mac/build/Covo.app`, signed ad hoc for this Mac (free). `COVO_SIGN_IDENTITY` signs it with an Apple ID certificate instead.
+- **Menu bar icon:** the bot's face, with a dot while working, closed eyes when paused, a count when things need you, and an outline when the service can't be reached.
+- **Panel:** the latest spending pause (Allow or Stop), Needs you, Running, Spent today, Open, New bot, and Pause all or Resume all. Natively below it: Open at login (`SMAppService`) and Quit.
+- **Notifications:** for each new pause or review. A spending pause can be allowed or stopped from the notification; anything else opens its screen.
+- **Starts the service:** if the service isn't answering, the app asks launchd to start the login item.
+- **Pause all:** `covo pause` and `covo resume` (`POST /api/pause`). No new task starts; running tasks finish, and queued ones start on resume. Both are logged (`bots.paused`, `bots.resumed`).
+- **Window design (20 Nov):** the translucent frame from ADR-006's update. The app follows the theme picked in Settings.
+- **API:**
+  - `GET /api/summary`;
+  - `GET`/`POST /api/pause`;
+  - `POST /api/pair-code` (token only, for the app's web views);
+  - `X-Covo-Client: mac-app`, which records answers as "you (Mac app)".
+- **Verified on a throwaway service:**
+  - the app signed in its window and panel;
+  - after a sample spending pause, it showed "1 needs you" and posted a notification as soon as the service reported a change;
+  - the panel page and the new frame in both themes, in the browser.
+- **Verified by you (20 Nov):** the translucent frame looks right. A sample spending pause showed "1 needs you" in the menu bar, and Allow from its card in the Covo window was recorded as "you (app)" in the activity log.
+- **Fixed while testing:** a pause from a task started outside the chat had no button in the chat, so typing "Allow" there just started a new task. The bot's chat is now one timeline: your messages plus its tasks from the terminal, the API or routines (marked "From the terminal" and so on), with their pauses, live progress and results. A queued message says why it's waiting, for example another task paused for your OK.
+- **Still to do:** signing with your Apple ID. For now the app is signed ad hoc for this Mac, and it isn't copied to /Applications.) | 4 days |
 | **M5** | **Your phone (Telegram).** Run `covo phone connect`. You create a bot with @BotFather and paste its token, which goes to the Keychain. Then you send the pairing code from your phone. Covo checks Telegram for messages itself (long polling), so no server or public address is needed.<br>• **Messages:** a task finished (short summary), approval cards with **Approve and Deny buttons** tied to that exact request and expiring, and failures.<br>• **Accepted only from your paired chat.** The phone can approve spending pauses. Raising limits or levels stays on the Mac until Touch ID arrives in Phase 4.<br>• **Optional:** start a task by messaging the bot (off by default). | Your phone gets a spending pause → tap Approve → the run continues; a message from another Telegram account is ignored and logged | 4 days |
 | **M6** | **Routines and the daily summary.** Commands: `covo routines add "Inbox tidy" --bot <name> --every "weekdays 9:00" "<task>"`, plus `list`, `pause` and `remove`, and the same in the app. The service runs them on time, and a run missed while the Mac slept happens once when it wakes (or is skipped, your choice). Quiet hours, and no new routine runs when memory is critically low (power profile). A daily summary at a time you pick, in the app and on your phone, covers what ran, what changed (with Undo), what was spent and what's waiting. | A routine set for 2 minutes from now runs by itself; the daily summary lists it | 3–4 days |
 | **M7** | **Demo, docs and safety check.** The acceptance demo below and README updates. Attack tests:<br>• a web page tries to call the service (cross-site request, DNS rebinding)<br>• requests with a missing or wrong token<br>• a Telegram message from a stranger<br>• a replayed or edited approval<br>• a run that tries to read the service token.<br>All are refused and logged. | The acceptance demo passes end to end | 2–3 days |

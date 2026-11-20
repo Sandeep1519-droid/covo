@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { API_PORT } from "@covo/api";
 import { covoPaths, VERSION } from "@covo/core";
 import { openDb } from "@covo/db";
-import { RunError, type RunEvent, type RunSummary, recoverStaleRuns, startRun } from "@covo/engine";
+import { isPaused, RunError, type RunEvent, type RunSummary, recoverStaleRuns, startRun } from "@covo/engine";
 import { currentCapacity } from "../commands/profile.ts";
 import type { Ctx } from "../main.ts";
 import { type Prepared, PrepareError, prepareRun, type RunHeader, type RunRequest } from "../runner.ts";
@@ -26,6 +26,8 @@ export type ServiceMessage =
   | { type: "event"; job: string; event: RunEvent }
   | { type: "done"; job: string; summary: RunSummary }
   | { type: "error"; job: string; message: string }
+  /** All bots were paused or resumed. */
+  | { type: "paused"; paused: boolean }
   /** Sent every few seconds so a long, quiet model step doesn't look like a dead connection. */
   | { type: "ping" };
 
@@ -78,6 +80,23 @@ export class Service {
     this.emit(job, { type: "queued", job: job.id, position: ahead });
     this.emit(job, { type: "header", job: job.id, header: job.prepared.header });
     this.pump();
+  }
+
+  /** Tries to start queued tasks now (after a resume, say). */
+  kick(): void {
+    this.pump();
+  }
+
+  /** Tasks waiting to start, oldest first. */
+  waitingJobs(): { id: string; goal: string; bot?: string }[] {
+    return this.jobs
+      .filter((j) => j.status === "queued")
+      .map((j) => ({ id: j.id, goal: j.req.goal, ...(j.req.bot ? { bot: j.req.bot } : {}) }));
+  }
+
+  /** Any change worth reloading for that isn't a task's own message (pause, resume). */
+  announce(m: ServiceMessage): void {
+    for (const w of this.watchers) w(m);
   }
 
   watch(fn: (m: ServiceMessage) => void): () => void {
@@ -150,11 +169,13 @@ export class Service {
       const next = this.jobs.find((j) => j.status === "queued");
       if (!next) return;
       const cap = currentCapacity(this.ctx);
-      const reason = !cap.canStart
-        ? cap.notes.join(" ")
-        : this.activeCount() >= cap.maxRuns
-          ? `This Mac runs ${cap.maxRuns} task${cap.maxRuns === 1 ? "" : "s"} at a time; waiting for a free slot.`
-          : undefined;
+      const reason = isPaused(this.ctx.home)
+        ? "All bots are paused. Resume them in the app or with: covo resume"
+        : !cap.canStart
+          ? cap.notes.join(" ")
+          : this.activeCount() >= cap.maxRuns
+            ? `This Mac runs ${cap.maxRuns} task${cap.maxRuns === 1 ? "" : "s"} at a time; waiting for a free slot.`
+            : undefined;
       if (reason) {
         if (next.waitingNoted !== reason) {
           next.waitingNoted = reason;

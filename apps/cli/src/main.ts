@@ -1,5 +1,5 @@
 import { covoHome, VERSION } from "@covo/core";
-import type { Engine } from "@covo/engine";
+import { type Engine, isPaused } from "@covo/engine";
 import type { Detected, ModelConfig, ModelProvider } from "@covo/models";
 import type { SecretStore, SystemInfo } from "@covo/platform";
 import { auditCommand } from "./commands/audit.ts";
@@ -7,6 +7,7 @@ import { botsCommand } from "./commands/bots.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { initCommand } from "./commands/init.ts";
 import { modelsCommand } from "./commands/models.ts";
+import { pauseCommand } from "./commands/pause.ts";
 import { profileCommand } from "./commands/profile.ts";
 import { diffCommand, discardCommand, keepCommand, undoCommand } from "./commands/review.ts";
 import { logCommand, runCommand, statusCommand } from "./commands/runs.ts";
@@ -29,6 +30,8 @@ Commands (Phase 1):
   bots                Your bots, each with its own models and level; "covo bots create"
   run "<task>"        Give a bot a task on a safe copy  [--bot <name>] [--model <saved model>] [--here]
   stop <run>          Stop a task Covo's service is running
+  pause               Pause all bots: no new task starts until you resume
+  resume              Let paused bots start tasks again
   service             Covo's background service: status, install, uninstall
   app                 Open Covo in your browser, signed in
   status              Show recent runs
@@ -138,10 +141,12 @@ export async function main(
     const line = h
       ? `Covo's service: running, ${h.running} task${h.running === 1 ? "" : "s"} now, ${h.queued} waiting.`
       : "Covo's service: not running (tasks run in your terminal; covo service install starts it).";
-    return { code: 0, out: `${r.out}${r.out.endsWith("\n\n") ? "" : "\n"}${line}\n` };
+    const paused = isPaused(ctx.home) ? "All bots are paused. Resume them with: covo resume\n" : "";
+    return { code: 0, out: `${r.out}${r.out.endsWith("\n\n") ? "" : "\n"}${line}\n${paused}` };
   }
   if (cmd === "service") return serviceCommand(ctx, rest);
   if (cmd === "stop") return stopCommand(ctx, rest);
+  if (cmd === "pause" || cmd === "resume") return pauseCommand(ctx, cmd === "pause");
   if (cmd === "app") return appCommand(ctx);
   if (cmd === "log") return logCommand(ctx, rest);
   if (cmd === "models") return modelsCommand(ctx, rest);

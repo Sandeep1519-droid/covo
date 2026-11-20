@@ -17,6 +17,8 @@ export {
 } from "./engines.ts";
 export type { LoopHooks, LoopInput, LoopLimits, LoopOutcome, LoopResult, ModelTurn, ToolStep } from "./loop.ts";
 export { DEFAULT_LIMITS, NUDGE, runLoop } from "./loop.ts";
+export type { PauseState } from "./pause.ts";
+export { isPaused, pauseState, setPaused } from "./pause.ts";
 export type { Capacity, LocalModel, Profile, ProfileName } from "./profile.ts";
 export { capacity, PROFILES, paramsOf, profileForMemory, suggestLocalModel } from "./profile.ts";
 export { contextBlock, systemPrompt, taskMessage } from "./prompt.ts";

@@ -1,6 +1,6 @@
 // What the app knows, and the small rules for showing it.
 
-import type { ApiApproval, ApiBot, ApiMe, ApiModel, ApiRun, ApiUsage, Level, RunState } from "@covo/api";
+import type { ApiApproval, ApiBot, ApiMe, ApiModel, ApiPause, ApiRun, ApiUsage, Level, RunState } from "@covo/api";
 
 export interface Data {
   me: ApiMe;
@@ -9,6 +9,7 @@ export interface Data {
   runs: ApiRun[];
   approvals: ApiApproval[];
   usage: ApiUsage;
+  pause: ApiPause;
 }
 
 export type SettingsTab = "general" | "models" | "spending" | "computer";
@@ -21,7 +22,9 @@ export type View =
   | { name: "needs-you" }
   | { name: "library" }
   | { name: "more" }
-  | { name: "settings"; tab: SettingsTab };
+  | { name: "settings"; tab: SettingsTab }
+  /** The Mac app's menu bar panel. */
+  | { name: "menubar" };
 
 export function viewFromHash(hash: string): View | null {
   const [, a, id] = hash.replace(/^#/, "").split("/");
@@ -30,7 +33,7 @@ export function viewFromHash(hash: string): View | null {
   if (a === "review" && arg) return { name: "review", runId: arg };
   if (a === "settings")
     return { name: "settings", tab: (SETTINGS_TABS as string[]).includes(arg) ? (arg as SettingsTab) : "general" };
-  if (a === "new-bot" || a === "needs-you" || a === "library" || a === "more") return { name: a };
+  if (a === "new-bot" || a === "needs-you" || a === "library" || a === "more" || a === "menubar") return { name: a };
   return null;
 }
 

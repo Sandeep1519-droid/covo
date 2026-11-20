@@ -42,6 +42,13 @@
   --color-status-success-subtle: #e6f6ec;
   --color-border-strong: #c3c3cb;
   --space-32: 32px;
+
+  /* The window frame around the content panel: translucent in the Mac app (the system's vibrancy
+     shows through), this solid colour in a browser. */
+  --color-bg-frame: #e4e4e9;
+  --color-frame-hover: rgb(0 0 0 / 0.06);
+  --color-panel-edge: rgb(0 0 0 / 0.08);
+  --radius-panel: 14px;
 }
 
 :root[data-theme="dark"] {
@@ -71,6 +78,11 @@
   --color-status-danger-subtle: #3d1a1f;
   --color-status-success: #3fb984;
   --color-status-success-subtle: #14301f;
+
+  --color-bg-frame: #121212;
+  --color-frame-hover: rgb(255 255 255 / 0.08);
+  --color-panel-edge: rgb(255 255 255 / 0.07);
+  --radius-panel: 12px;
 }
 
 /* Text styles */

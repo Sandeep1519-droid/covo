@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ApiBot, ApiChanges, ApiChatMessage, ApiModel, ApiRun, ApiRunDetail } from "@covo/api";
+import type { ApiBot, ApiChanges, ApiChatMessage, ApiModel, ApiRun, ApiRunDetail, ApiSummary } from "@covo/api";
 import { covoPaths } from "@covo/core";
 import { openDb } from "@covo/db";
 import { MockProvider } from "@covo/models";
@@ -262,6 +262,78 @@ describe("chat (M3)", () => {
     expect(bad.status).toBe(409);
     const providers = (await (await api("/providers")).json()) as { id: string; needsKey: boolean }[];
     expect(providers).toContainEqual(expect.objectContaining({ id: "ollama", needsKey: false }));
+  });
+});
+
+describe("the Mac app (M4)", () => {
+  test("pause all: new tasks wait in the queue and start on resume; both are logged", async () => {
+    const pause = (paused: boolean) => api("/pause", { method: "POST", body: JSON.stringify({ paused }) });
+    expect(await (await pause(true)).json()).toMatchObject({ paused: true, by: "you (API)" });
+    await finished(1, async () => {
+      expect((await api("/runs", { method: "POST", body: JSON.stringify({ goal: "write NOTES.md" }) })).status).toBe(
+        202,
+      );
+      await Bun.sleep(100);
+      const s = (await (await api("/summary")).json()) as ApiSummary;
+      expect(s).toMatchObject({ paused: true, queued: 1, running: [] });
+      expect((await (await api("/runs")).json()) as ApiRun[]).toEqual([]);
+      expect(await (await pause(false)).json()).toMatchObject({ paused: false });
+    });
+    const runs = (await (await api("/runs")).json()) as ApiRun[];
+    expect(runs[0]).toMatchObject({ goal: "write NOTES.md", state: "KEPT" });
+    const db = openDb(covoPaths(home).db);
+    const actions = db
+      .query<{ action: string }, []>("SELECT action FROM audit_log WHERE action LIKE 'bots.%' ORDER BY seq")
+      .all()
+      .map((r) => r.action);
+    db.close();
+    expect(actions).toEqual(["bots.paused", "bots.resumed"]);
+    expect((await api("/pause", { method: "POST", body: JSON.stringify({ paused: "yes" }) })).status).toBe(400);
+  });
+
+  test("the summary lists what waits on you; the Mac app's answers are marked as its own", async () => {
+    const db = openDb(covoPaths(home).db);
+    db.query(
+      `INSERT INTO runs (id, agent_id, department_id, trigger, goal, state, created_at, pid)
+       VALUES ('run_wait', 'bot_assistant', 'dept_default', 'cli', 'tidy', 'AWAITING_APPROVAL', 1, ?)`,
+    ).run(process.pid);
+    db.query(
+      `INSERT INTO approvals (id, run_id, kind, summary, payload_json, payload_hash, expires_at)
+       VALUES ('apr_1', 'run_wait', 'spend', 'Spend more?', '{"grantUsd":0.5}', 'h', ?)`,
+    ).run(Date.now() + 60_000);
+    db.close();
+    const s = (await (await api("/summary")).json()) as ApiSummary;
+    expect(s.waiting).toEqual([
+      expect.objectContaining({ id: "apr_1", kind: "approval", botName: "Assistant", payloadHash: "h" }),
+    ]);
+    expect(s.waiting[0]?.title).toContain("$0.50");
+    const r = await api("/approvals/apr_1", {
+      method: "POST",
+      headers: { "x-covo-client": "mac-app" },
+      body: JSON.stringify({ decision: "approve", payloadHash: "h" }),
+    });
+    expect(r.status).toBe(200);
+    const db2 = openDb(covoPaths(home).db);
+    expect(db2.query<{ by: string }, []>("SELECT decided_by AS by FROM approvals").get()?.by).toBe("you (Mac app)");
+    db2.close();
+  });
+
+  test("only the token can mint a sign-in code for the Mac app's window", async () => {
+    const r = await api("/pair-code", { method: "POST", body: "{}" });
+    expect(r.status).toBe(200);
+    const { code } = (await r.json()) as { code: string };
+    const paired = await fetch(`${base}/api/pair`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: base },
+      body: JSON.stringify({ code }),
+    });
+    const cookie = (paired.headers.get("set-cookie") ?? "").split(";")[0] as string;
+    const again = await fetch(`${base}/api/pair-code`, {
+      method: "POST",
+      headers: { cookie, origin: base, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(again.status).toBe(403);
   });
 });
 

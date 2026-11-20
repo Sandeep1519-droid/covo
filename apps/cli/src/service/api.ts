@@ -7,11 +7,13 @@ import type {
   ApiLimits,
   ApiMe,
   ApiModel,
+  ApiPause,
   ApiProfile,
   ApiProvider,
   ApiRun,
   ApiRunDetail,
   ApiStep,
+  ApiSummary,
   ApiUsage,
   UsageRow,
 } from "@covo/api";
@@ -27,12 +29,15 @@ import {
   decide,
   discardRun,
   failMessage,
+  isPaused,
   keepRun,
   linkRun,
   listBots,
   listMessages,
+  pauseState,
   RunError,
   reviewRun,
+  setPaused,
   startOfLocalDay,
   undoRun,
   updateBot,
@@ -335,6 +340,60 @@ async function sendMessage(
   }
 }
 
+function pauseInfo(ctx: Ctx, service: Service): ApiPause {
+  return { ...pauseState(ctx.home), queued: service.waitingJobs().length };
+}
+
+function summary(ctx: Ctx, service: Service): ApiSummary {
+  const runs = withDb(ctx, (db) =>
+    db
+      .query<RunRow, []>(
+        `${RUN_SELECT} WHERE r.state IN ('QUEUED','PREPARING','RUNNING','AWAITING_APPROVAL','REVIEWING') ORDER BY r.created_at DESC`,
+      )
+      .all()
+      .map(toRun),
+  );
+  const byRun = new Map(runs.map((r) => [r.id, r]));
+  const waiting: ApiSummary["waiting"] = [];
+  for (const a of approvals(ctx)) {
+    const r = byRun.get(a.runId);
+    if (!r) continue;
+    waiting.push({
+      id: a.id,
+      kind: "approval",
+      runId: r.id,
+      botId: r.botId,
+      botName: r.botName,
+      title: a.spend ? `Spend up to $${a.spend.grantUsd.toFixed(2)} more: ${r.goal}` : a.summary,
+      payloadHash: a.payloadHash,
+      at: r.createdAt,
+    });
+  }
+  for (const r of runs.filter((x) => x.state === "REVIEWING")) {
+    waiting.push({
+      id: r.id,
+      kind: "changes",
+      runId: r.id,
+      botId: r.botId,
+      botName: r.botName,
+      title: `Review changes: ${r.goal}`,
+      at: r.finishedAt ?? r.createdAt,
+    });
+  }
+  waiting.sort((x, y) => y.at - x.at);
+  const u = usage(ctx, 1);
+  return {
+    paused: isPaused(ctx.home),
+    running: runs
+      .filter((r) => r.state === "PREPARING" || r.state === "RUNNING" || r.state === "QUEUED")
+      .map((r) => ({ runId: r.id, botId: r.botId, botName: r.botName, goal: r.goal, startedAt: r.startedAt })),
+    queued: service.waitingJobs().length,
+    waiting,
+    todayUsd: u.todayUsd,
+    dayLimitUsd: u.limits.dayUsd,
+  };
+}
+
 function approvals(ctx: Ctx): ApiApproval[] {
   return withDb(ctx, (db) =>
     db
@@ -447,7 +506,9 @@ export async function handleApi(
   const m = req.method;
   const seg = p.split("/").slice(2).map(decodeURIComponent); // after /api
   const [a, id, action] = seg;
-  const who = by === "session" ? "you (app)" : "you (API)";
+  // The Mac app signs its own requests with the token and says so; the token is yours either way.
+  const who =
+    by === "session" ? "you (app)" : req.headers.get("x-covo-client") === "mac-app" ? "you (Mac app)" : "you (API)";
 
   if (
     (m === "POST" || m === "PATCH" || m === "PUT") &&
@@ -466,6 +527,22 @@ export async function handleApi(
       });
     }
     if (m === "GET" && a === "me" && !id) return json({ name: userName() } satisfies ApiMe);
+    // A one-time sign-in code for the Mac app's window. Token only: a browser session can't mint more.
+    if (m === "POST" && a === "pair-code" && !id) {
+      if (by !== "token") throw new HttpError(403, "Only Covo's own programs can ask for a sign-in code.");
+      return json({ code: gate.newCode() });
+    }
+    if (a === "pause" && !id) {
+      if (m === "POST") {
+        const b = await body<{ paused?: unknown }>(req);
+        if (typeof b.paused !== "boolean") throw new HttpError(400, "paused must be true or false.");
+        setPaused(ctx.home, b.paused, who, ctx.now);
+        service.announce({ type: "paused", paused: b.paused });
+        if (!b.paused) service.kick();
+      }
+      if (m === "GET" || m === "POST") return json(pauseInfo(ctx, service));
+    }
+    if (m === "GET" && a === "summary" && !id) return json(summary(ctx, service));
     if (a === "session" && m === "DELETE") {
       gate.endSession(req);
       return json({ ok: true }, 200, { "set-cookie": `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0` });

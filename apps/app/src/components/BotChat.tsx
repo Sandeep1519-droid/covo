@@ -59,6 +59,7 @@ export function BotChat({
   const asked = useRef(new Set<string>());
   known.current = new Set(data.runs.map((r) => r.id));
   const waiting = approvalsOf(data, bot.id).length;
+  const timeline = messages === null ? null : chatTimeline(data, bot.id, messages);
   const latest = runsOf(data, bot.id)[0];
 
   const load = useCallback(async () => {
@@ -140,7 +141,7 @@ export function BotChat({
       </header>
 
       <div className="chat-scroll">
-        {messages === null ? null : messages.length === 0 ? (
+        {timeline === null ? null : timeline.length === 0 ? (
           <div className="chat-empty">
             <Avatar shape={bot.shape} color={bot.color} size={72} />
             <h1 className="t-display">What should {bot.name} do?</h1>
@@ -154,14 +155,15 @@ export function BotChat({
           </div>
         ) : (
           <div className="messages">
-            {messages.map((m, i) => {
-              const prev = messages[i - 1];
+            {timeline.map((item, i) => {
+              const prev = timeline[i - 1];
+              const m = item.message;
               return (
-                <Fragment key={m.id}>
-                  {(!prev || !sameDay(prev.createdAt, m.createdAt)) && (
+                <Fragment key={item.key}>
+                  {(!prev || !sameDay(prev.at, item.at)) && (
                     <div className="day t-caption muted">
                       <span className="rule" />
-                      {dayLabel(m.createdAt)}
+                      {dayLabel(item.at)}
                       <span className="rule" />
                     </div>
                   )}
@@ -169,6 +171,7 @@ export function BotChat({
                     data={data}
                     bot={bot}
                     message={m}
+                    from={item.from}
                     steps={m.runId ? steps(m.runId) : []}
                     refresh={() => {
                       refresh();
@@ -212,6 +215,7 @@ function Turn({
   data,
   bot,
   message,
+  from,
   steps,
   refresh,
   retry,
@@ -220,6 +224,8 @@ function Turn({
   data: Data;
   bot: ApiBot;
   message: ApiChatMessage;
+  /** Where the task came from, when it wasn't this chat ("From the terminal"). */
+  from?: string | undefined;
   steps: LiveStep[];
   refresh: () => void;
   retry: () => void;
@@ -231,7 +237,10 @@ function Turn({
       <div className="you-says">
         <div className="bubble">
           <p className="t-body-m">{message.text}</p>
-          <span className="t-caption muted">{clock(message.createdAt)}</span>
+          <span className="t-caption muted">
+            {from ? `${from} · ` : ""}
+            {clock(message.createdAt)}
+          </span>
         </div>
       </div>
       <BotReply
@@ -316,7 +325,15 @@ function BotReply({
       </>
     );
   } else if (!run) {
-    body = <p className="t-body-m">Waiting for a free slot. I'll start soon.</p>;
+    body = (
+      <p className="t-body-m">
+        {data.pause.paused
+          ? "Waiting to start: all bots are paused. Resume them to let me begin."
+          : data.approvals.length > 0
+            ? "Waiting to start: another task is paused for your OK and is using this Mac's free slot. Answer it (in Needs you) and I'll begin."
+            : "Waiting for a free slot. I'll start soon."}
+      </p>
+    );
     pill = <Pill label="Queued" />;
   } else {
     const s = runStatus(run);
@@ -396,4 +413,52 @@ function mergeSteps(a: LiveStep[], b: LiveStep[]): LiveStep[] {
   for (const s of a) by.set(s.seq, s);
   for (const s of b) by.set(s.seq, s);
   return [...by.values()].sort((x, y) => x.seq - y.seq);
+}
+
+/** Where a task came from, when it wasn't this chat. */
+const FROM: Record<string, string> = {
+  cli: "From the terminal",
+  api: "From the API",
+  chat: "From the app",
+  cron: "From a routine",
+  heartbeat: "From a routine",
+  webhook: "From a webhook",
+};
+
+interface TimelineItem {
+  key: string;
+  at: number;
+  message: ApiChatMessage;
+  from?: string;
+}
+
+/**
+ * The chat as you see it: your messages, plus this bot's tasks that were started somewhere else
+ * (the terminal, the API, a routine), so their progress, pauses and results show here too.
+ */
+function chatTimeline(data: Data, botId: string, messages: ApiChatMessage[]): TimelineItem[] {
+  const inChat = new Set(messages.map((m) => m.runId));
+  // With a full page of messages, older tasks may belong to messages that weren't loaded.
+  const since = messages.length >= 100 ? (messages[0]?.createdAt ?? 0) : 0;
+  const outside = runsOf(data, botId)
+    .filter((r) => !inChat.has(r.id) && r.createdAt >= since)
+    .map(
+      (r): TimelineItem => ({
+        key: r.id,
+        at: r.createdAt,
+        from: FROM[r.trigger] ?? "From outside this chat",
+        message: {
+          id: r.id,
+          role: "you",
+          text: r.goal,
+          runId: r.id,
+          model: r.model,
+          error: null,
+          createdAt: r.createdAt,
+        },
+      }),
+    );
+  return [...messages.map((m): TimelineItem => ({ key: m.id, at: m.createdAt, message: m })), ...outside].sort(
+    (a, b) => a.at - b.at,
+  );
 }
