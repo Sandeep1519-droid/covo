@@ -1,6 +1,6 @@
 # Phase 3 Plan: The App and Your Phone
 
-> Status: **in progress** (M0–M4 done), 19 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
+> Status: **in progress** (M0–M5 done), 19 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
 
 ## 1. Goal
 
@@ -103,7 +103,7 @@ Covo stays local. Nothing listens beyond your own Mac, and every request to the 
 - **Verified by you (20 Nov):** the translucent frame looks right. A sample spending pause showed "1 needs you" in the menu bar, and Allow from its card in the Covo window was recorded as "you (app)" in the activity log.
 - **Fixed while testing:** a pause from a task started outside the chat had no button in the chat, so typing "Allow" there just started a new task. The bot's chat is now one timeline: your messages plus its tasks from the terminal, the API or routines (marked "From the terminal" and so on), with their pauses, live progress and results. A queued message says why it's waiting, for example another task paused for your OK.
 - **Still to do:** signing with your Apple ID. For now the app is signed ad hoc for this Mac, and it isn't copied to /Applications.) | 4 days |
-| **M5** | **Your phone (Telegram).** Run `covo phone connect`. You create a bot with @BotFather and paste its token, which goes to the Keychain. Then you send the pairing code from your phone. Covo checks Telegram for messages itself (long polling), so no server or public address is needed.<br>• **Messages:** a task finished (short summary), approval cards with **Approve and Deny buttons** tied to that exact request and expiring, and failures.<br>• **Accepted only from your paired chat.** The phone can approve spending pauses. Raising limits or levels stays on the Mac until Touch ID arrives in Phase 4.<br>• **Optional:** start a task by messaging the bot (off by default). | Your phone gets a spending pause → tap Approve → the run continues; a message from another Telegram account is ignored and logged (built:
+| **M5** | **Your phone (Telegram).** Run `covo phone connect`. You create a bot with @BotFather and paste its token, which goes to the Keychain. Then you send the pairing code from your phone. Covo checks Telegram for messages itself (long polling), so no server or public address is needed.<br>• **Messages:** a task finished (short summary), approval cards with **Approve and Deny buttons** tied to that exact request and expiring, and failures.<br>• **Accepted only from your paired chat.** The phone can approve spending pauses. Raising limits or levels stays on the Mac until Touch ID arrives in Phase 4.<br>• **Optional:** start a task by messaging the bot (off by default). | Your phone gets a spending pause → tap Approve → the run continues; a message from another Telegram account is ignored and logged (done:
 - **Shape:** `packages/phone` holds:
   - a small Telegram Bot API client (long polling, so no server);
   - pairing;
@@ -120,7 +120,12 @@ Covo stays local. Nothing listens beyond your own Mac, and every request to the 
   - Telegram's position in the message stream is saved before each message is handled, so nothing is done twice after a restart.
 - **Phone tasks:** off by default. When on, a message goes to your main bot's chat and shows as "From your phone".
 - **Verified** with a stand-in Telegram (15 tests, including the service path: card sent, a stranger's tap ignored, your tap recorded as "you (phone)").
-- **Waiting for you:** connecting a real bot and tapping a real card.) | 4 days |
+- **Verified by you (20 Nov):**
+  - paired a real bot from your phone;
+  - `/status` was answered by Covo's service;
+  - the test card's Allow once was answered and the card updated.
+  
+  A real spending pause needs a paid model; that path is covered by the tests.) | 4 days |
 | **M6** | **Routines and the daily summary.** Commands: `covo routines add "Inbox tidy" --bot <name> --every "weekdays 9:00" "<task>"`, plus `list`, `pause` and `remove`, and the same in the app. The service runs them on time, and a run missed while the Mac slept happens once when it wakes (or is skipped, your choice). Quiet hours, and no new routine runs when memory is critically low (power profile). A daily summary at a time you pick, in the app and on your phone, covers what ran, what changed (with Undo), what was spent and what's waiting. | A routine set for 2 minutes from now runs by itself; the daily summary lists it | 3–4 days |
 | **M7** | **Demo, docs and safety check.** The acceptance demo below and README updates. Attack tests:<br>• a web page tries to call the service (cross-site request, DNS rebinding)<br>• requests with a missing or wrong token<br>• a Telegram message from a stranger<br>• a replayed or edited approval<br>• a run that tries to read the service token.<br>All are refused and logged. | The acceptance demo passes end to end | 2–3 days |
 
