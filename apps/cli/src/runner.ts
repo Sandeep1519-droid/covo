@@ -84,7 +84,7 @@ export async function prepareRun(ctx: Ctx, req: RunRequest): Promise<Prepared> {
       try {
         const cfg = await resolveModel(ctx.home, ctx.secrets ?? secrets(), env, n);
         const label = n ?? cfg.connection ?? cfg.model;
-        if (cfg.engine && req.unattended && !getRoutineSettings(ctx.home).subscriptions) {
+        if (cfg.subscription && req.unattended && !getRoutineSettings(ctx.home).subscriptions) {
           // Routines run with nobody watching; subscriptions are for you at the keyboard unless you
           // allow it (Settings, or: covo routines subscriptions on). Check your provider's terms first.
           skipped.push(`${label}: routines don't use subscriptions unless you allow it`);

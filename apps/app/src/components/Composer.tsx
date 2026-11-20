@@ -93,6 +93,15 @@ export function Composer({
           </span>
           <Pill label={level} dot={false} />
           <span className="grow" />
+          {model?.subscription === "chatgpt" && (
+            // OpenAI's rule for Sign in with ChatGPT: say it near the model picker, with a way to manage usage.
+            <span className="plan-note t-caption muted">
+              Using ChatGPT plan ·{" "}
+              <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
+                Manage usage
+              </a>
+            </span>
+          )}
           <div className="model-picker" ref={menu}>
             <button
               type="button"
@@ -131,7 +140,7 @@ export function Composer({
                   >
                     <span className="t-body-m">{m.name}</span>
                     <span className="t-caption muted">
-                      {m.providerLabel} · {m.model}
+                      {m.subscription === "chatgpt" ? "Your ChatGPT plan" : m.providerLabel} · {m.model}
                       {m.isDefault ? " · default" : ""}
                     </span>
                   </button>

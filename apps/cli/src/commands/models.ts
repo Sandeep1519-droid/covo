@@ -2,6 +2,9 @@ import { existsSync } from "node:fs";
 import { tildify } from "@covo/core";
 import {
   addConnection,
+  beginChatGPTSignIn,
+  type ChatGPTOptions,
+  chatgptModels,
   checkModels,
   type Detected,
   detect,
@@ -12,13 +15,17 @@ import {
   loadSettings,
   type ModelConfig,
   ModelConfigError,
+  markWelcomed,
   modelConfig,
   NAME_RE,
   PRESETS,
   presetById,
   removeConnection,
   resolveModel,
+  type SignIn,
+  saveSettings,
   setDefault,
+  signOutChatGPT,
   suggestName,
 } from "@covo/models";
 import { secrets as defaultSecrets, SecretError } from "@covo/platform";
@@ -34,6 +41,8 @@ const USAGE = `Usage:
       [--name <n>] [--model <m>] [--base-url <url>] [--key-stdin] [--default] [--no-test]
   covo models add claude-code         Use your Claude subscription through Claude Code
       [--name <n>] [--model default|sonnet|opus|haiku|fable] [--default] [--yes]
+  covo models add chatgpt             Use your ChatGPT Plus or Pro plan (Sign in with ChatGPT)
+      [--model <m>] [--default]
   covo models test [name]             Send one small test request
   covo models default <name>          Use this one when a bot doesn't say otherwise
   covo models remove <name>           Forget it and delete its key from the Keychain
@@ -68,6 +77,12 @@ export async function modelsCommand(ctx: Ctx, args: string[]): Promise<CliResult
       return { code: 0, out: `Bots now use "${rest[0]}" unless they say otherwise.\n` };
     }
     if (sub === "remove" && rest[0]) {
+      const was = loadSettings(ctx.home).connections.find((x) => x.name === rest[0]);
+      if (was?.provider === "chatgpt") {
+        await signOutChatGPT(chatgptOptions(ctx));
+        await removeConnection(ctx.home, store(ctx), was.name);
+        return { code: 0, out: `Signed out of ChatGPT and removed "${was.name}".\n` };
+      }
       const c = await removeConnection(ctx.home, store(ctx), rest[0]);
       return { code: 0, out: `Removed "${c.name}"${c.keyId ? " and deleted its key from the Keychain" : ""}.\n` };
     }
@@ -88,9 +103,19 @@ async function listModels(ctx: Ctx): Promise<CliResult> {
     for (const c of s.connections) {
       const p = presetById(c.provider);
       const en = engineById(c.provider);
-      const key = c.keyId ? "key in Keychain" : en ? "your subscription" : p?.local ? "no key needed" : "";
+      const plan = c.provider === "chatgpt";
+      const key = c.keyId
+        ? "key in Keychain"
+        : plan
+          ? "your ChatGPT plan"
+          : en
+            ? "your subscription"
+            : p?.local
+              ? "no key needed"
+              : "";
+      const label = plan ? "ChatGPT (Sign in with ChatGPT)" : (p?.label ?? en?.label ?? c.provider);
       lines.push(
-        `  ${c.name === s.default ? "★" : " "} ${c.name.padEnd(12)} ${(p?.label ?? en?.label ?? c.provider).padEnd(28)} ${c.model.padEnd(24)} ${key}`,
+        `  ${c.name === s.default ? "★" : " "} ${c.name.padEnd(12)} ${label.padEnd(28)} ${c.model.padEnd(24)} ${key}`,
       );
     }
     lines.push("", "★ = used when a bot doesn't say otherwise");
@@ -117,7 +142,9 @@ function describeDetected(d: Detected): string[] {
     out.push(
       en
         ? `${en.label} (${c.path}): use ${en.plan} with: covo models add ${en.id}`
-        : `The ${c.name} command-line tool (${c.path}): its terms don't allow other apps to use the subscription (see docs/SUBSCRIPTIONS.md); connect an API key instead`,
+        : c.name === "codex"
+          ? `Codex (${c.path}): Covo doesn't use the Codex program's sign-in, but you can use your ChatGPT plan with: covo models add chatgpt`
+          : `The ${c.name} command-line tool (${c.path}): its terms don't allow other apps to use the subscription (see docs/SUBSCRIPTIONS.md); connect an API key instead`,
     );
   }
   return out;
@@ -148,10 +175,14 @@ async function add(ctx: Ctx, args: string[]): Promise<CliResult> {
       const hint = d.clis.some((c) => c.name === en.command) ? "installed" : "not installed";
       print(`  ${String(PRESETS.length + i + 1).padStart(2)}. ${`${en.label}: ${en.plan}`.padEnd(46)} ${hint}\n`);
     });
+    print(
+      `  ${String(PRESETS.length + ENGINES.length + 1).padStart(2)}. ${"ChatGPT: your ChatGPT Plus or Pro plan".padEnd(46)} sign in with ChatGPT\n`,
+    );
     const a = await ask.ask("\nNumber or name:", "1");
-    const all = [...PRESETS.map((p) => p.id), ...ENGINES.map((e) => e.id)];
+    const all = [...PRESETS.map((p) => p.id), ...ENGINES.map((e) => e.id), "chatgpt"];
     provider = /^\d+$/.test(a) ? all[Number(a) - 1] : a.toLowerCase();
   }
+  if (provider === "chatgpt") return addChatGPT(ctx, opts);
   const engine = provider ? engineById(provider) : undefined;
   if (engine) return addEngine(ctx, engine, opts);
   const preset = provider ? presetById(provider) : undefined;
@@ -284,7 +315,7 @@ async function addEngine(ctx: Ctx, en: EngineInfo, opts: Record<string, string |
   const ask = ctx.prompt;
   const print = ctx.print;
   const settings = loadSettings(ctx.home);
-  const path = findProgram(ctx, en.command);
+  const path = findProgram(ctx, en.command, en.knownPaths);
   if (!path) {
     return {
       code: 1,
@@ -338,4 +369,99 @@ async function addEngine(ctx: Ctx, en: EngineInfo, opts: Record<string, string |
     "",
   ];
   return { code: check.ok ? 0 : 1, out: lines.join("\n") };
+}
+
+/** Sign-in settings for your ChatGPT plan (tests point COVO_CHATGPT_AUTH and _API at stand-ins). */
+export function chatgptOptions(ctx: Ctx): ChatGPTOptions {
+  return {
+    home: ctx.home,
+    store: store(ctx),
+    now: ctx.now ?? Date.now,
+    ...(ctx.env.COVO_CHATGPT_AUTH ? { authBase: ctx.env.COVO_CHATGPT_AUTH } : {}),
+    ...(ctx.env.COVO_CHATGPT_API ? { apiBase: ctx.env.COVO_CHATGPT_API } : {}),
+  };
+}
+
+export const CHATGPT_WELCOME =
+  "You're using your ChatGPT plan. Eligible usage in this app uses your ChatGPT plan. Manage usage in your ChatGPT settings: https://chatgpt.com/settings/usage";
+
+/** Your ChatGPT Plus or Pro plan, through Sign in with ChatGPT (docs/SUBSCRIPTIONS.md). */
+async function addChatGPT(ctx: Ctx, opts: Record<string, string | true>): Promise<CliResult> {
+  const o = chatgptOptions(ctx);
+  ctx.print(
+    [
+      "Covo will use your ChatGPT Plus or Pro plan for your bots' AI requests.",
+      "  • You sign in on OpenAI's own page, in your browser. Covo never sees your password.",
+      "  • Covo keeps its own sign-in in the macOS Keychain. It never uses the Codex program's sign-in.",
+      "  • Use counts toward your plan's limits, shared with ChatGPT and Codex: https://chatgpt.com/settings/usage",
+      "  • Covo's spending limits don't apply: your plan is a flat fee.",
+      "  • Routines use it only if you allow subscriptions for routines.",
+      "  Details and the terms we checked: docs/SUBSCRIPTIONS.md",
+      "",
+    ].join("\n"),
+  );
+  let signIn: SignIn;
+  try {
+    signIn = await beginChatGPTSignIn(o);
+  } catch (e) {
+    return { code: 1, out: `${(e as Error).message}\n` };
+  }
+  const open = ctx.openUrl ?? ((u: string) => Bun.spawnSync(["/usr/bin/open", u]).exitCode === 0);
+  ctx.print(
+    open(signIn.url)
+      ? "Your browser is open on OpenAI's sign-in page. Finish there; this waits for you.\n"
+      : `Open this link in your browser to sign in:\n  ${signIn.url}\n`,
+  );
+  let who: { email: string | null; firstTime: boolean };
+  try {
+    who = await signIn.done;
+  } catch (e) {
+    return { code: 1, out: `${(e as Error).message} Nothing was saved.\n` };
+  }
+  return { code: 0, out: await saveChatGPT(ctx, o, who, opts) };
+}
+
+/** After signing in: pick a model, save the connection, show the one-time welcome. Shared with the app. */
+export async function saveChatGPT(
+  ctx: Ctx,
+  o: ChatGPTOptions,
+  who: { email: string | null; firstTime: boolean },
+  opts: { model?: string | true; default?: string | true; name?: string | true } = {},
+  how: { printWelcome?: boolean } = {},
+): Promise<string> {
+  const models = await chatgptModels(o).catch(() => []);
+  let model = typeof opts.model === "string" ? opts.model : undefined;
+  if (!model && ctx.prompt && models.length > 1) {
+    for (const [i, m] of models.entries()) ctx.print(`  ${String(i + 1).padStart(2)}. ${m.name} (${m.slug})\n`);
+    const a = await ctx.prompt.ask("Which model? (number)", "1");
+    model = models[Number(a) - 1]?.slug;
+  }
+  model = model ?? models[0]?.slug;
+  if (!model)
+    throw new ModelConfigError(
+      "You're signed in, but OpenAI didn't list any models for your account. Try again later: covo models add chatgpt",
+    );
+  const s = loadSettings(ctx.home);
+  const name = typeof opts.name === "string" ? opts.name : "chatgpt";
+  const existing = s.connections.find((c) => c.provider === "chatgpt");
+  if (existing) {
+    existing.model = model;
+    if (opts.default === true) s.default = existing.name;
+    saveSettings(ctx.home, s);
+  } else {
+    await addConnection(ctx.home, store(ctx), {
+      name,
+      provider: "chatgpt",
+      model,
+      makeDefault: s.connections.length === 0 || opts.default === true,
+    });
+  }
+  const lines = [
+    `Connected${who.email ? ` as ${who.email}` : ""}. Bots can use "${existing?.name ?? name}" (${model}) on your ChatGPT plan.`,
+  ];
+  if (who.firstTime && how.printWelcome !== false) {
+    lines.push("", CHATGPT_WELCOME);
+    markWelcomed(ctx.home);
+  }
+  return `${lines.join("\n")}\n`;
 }

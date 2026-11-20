@@ -17,6 +17,20 @@ test("saves, reads, replaces and deletes a key in the macOS Keychain", async () 
   await kc.delete(id); // deleting twice is fine
 });
 
+test("a long secret (a sign-in token) is saved in parts, read back whole, and fully removed", async () => {
+  const long = `eyJ${"A".repeat(9_500)}.sig`;
+  await kc.put(id, long, "test token");
+  expect(await kc.get(id)).toBe(long);
+  expect(await kc.get(`${id}.p1`)).toHaveLength(3_000);
+  await kc.put(id, "short-again"); // replacing it removes the old parts
+  expect(await kc.get(id)).toBe("short-again");
+  expect(await kc.get(`${id}.p1`)).toBeNull();
+  await kc.put(id, long);
+  await kc.delete(id);
+  expect(await kc.get(id)).toBeNull();
+  expect(await kc.get(`${id}.p4`)).toBeNull();
+});
+
 test("refuses values that can't be keys and ids that could inject commands", async () => {
   expect(kc.put(id, 'abc" -w "x')).rejects.toThrow(SecretError);
   expect(kc.put(id, "two words")).rejects.toThrow(SecretError);

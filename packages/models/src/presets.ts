@@ -3,7 +3,8 @@
 // itself when you add it (covo models add, M1), so this list doesn't go stale; only Anthropic's
 // current models are listed because Covo talks to Anthropic natively.
 
-export type ProviderKind = "anthropic" | "openai-compatible" | "ollama";
+/** "openai-responses": OpenAI's Responses API, used for your ChatGPT plan (Phase 4 M1). */
+export type ProviderKind = "anthropic" | "openai-compatible" | "ollama" | "openai-responses";
 
 export interface Preset {
   id: string;

@@ -160,6 +160,42 @@ export interface ApiModel {
   isDefault: boolean;
   /** A subscription engine (e.g. Claude Code). */
   engine: boolean;
+  /** Paid by your plan, not per use: "chatgpt" (Sign in with ChatGPT) or "claude-code". */
+  subscription: string | null;
+}
+
+/** GET /api/subscriptions (Phase 4 M1): your own AI plans. */
+export interface ApiSubscriptions {
+  chatgpt: {
+    /** Signed in, with permission to use your plan, and saved as a model. */
+    connected: boolean;
+    email: string | null;
+    /** Its name among your models, and the model it uses. */
+    connection: string | null;
+    model: string | null;
+    /** The models your ChatGPT account lists. */
+    models: { slug: string; name: string }[];
+    /** The one-time "You're using your ChatGPT plan" note was shown. */
+    welcomed: boolean;
+    /** A sign-in is waiting for you to finish it in your browser. */
+    signingIn: boolean;
+    /** Why the last sign-in didn't finish. */
+    error: string | null;
+    manageUsageUrl: string;
+  };
+  claudeCode: {
+    /** Where the claude program is, or null if it isn't installed. */
+    path: string | null;
+    /** The official install command, and how to sign in. */
+    install: string;
+    signIn: string;
+    /** From `claude auth status`; null until checked. */
+    signedIn: boolean | null;
+    /** "claude.ai" is a subscription; "api_key" would bill an API key instead. */
+    method: string | null;
+    connected: boolean;
+    connection: string | null;
+  };
 }
 
 /** POST /api/models: the key goes straight to the Keychain. */

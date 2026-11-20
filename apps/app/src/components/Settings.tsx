@@ -9,6 +9,7 @@ import { type Data, type SettingsTab, usd } from "../model.ts";
 import type { ThemeChoice } from "../theme.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { Button, Pill } from "./Pill.tsx";
+import { SubscriptionRows } from "./Subscriptions.tsx";
 
 const TABS: [SettingsTab, string, IconName][] = [
   ["general", "General", "tab-general"],
@@ -154,6 +155,9 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
   };
   return (
     <>
+      <span className="t-overline muted">Your subscriptions</span>
+      <SubscriptionRows refresh={refresh} />
+      <span className="t-overline muted">Your models</span>
       <div className="rows">
         {models.map((m) => (
           <div className="row" key={m.name}>
@@ -163,7 +167,11 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
                 {m.name} <span className="muted t-body-s">· {m.providerLabel}</span>
               </span>
               <span className="t-body-s muted">
-                {m.engine ? "Uses your subscription" : m.model}
+                {m.subscription === "chatgpt"
+                  ? `Uses your ChatGPT plan · ${m.model}`
+                  : m.engine
+                    ? "Uses your subscription"
+                    : m.model}
                 {m.hasKey ? " · key in the Keychain" : ""}
               </span>
             </span>
@@ -174,8 +182,17 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
                 Make default
               </Button>
             )}
-            <Button small onClick={() => act(`/models/${encodeURIComponent(m.name)}`, "DELETE")}>
-              Remove
+            <Button
+              small
+              onClick={() =>
+                // Your ChatGPT plan: removing it also signs Covo out at OpenAI.
+                act(
+                  m.subscription === "chatgpt" ? "/subscriptions/chatgpt" : `/models/${encodeURIComponent(m.name)}`,
+                  "DELETE",
+                )
+              }
+            >
+              {m.subscription === "chatgpt" ? "Sign out" : "Remove"}
             </Button>
           </div>
         ))}
@@ -214,10 +231,6 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
           onCancel={() => setAdding(false)}
         />
       )}
-      <p className="t-body-s muted">
-        Have a Claude subscription? Connect it from the terminal with covo models add claude-code. It asks you to
-        confirm, because it uses the Claude Code program installed on this Mac.
-      </p>
     </>
   );
 }

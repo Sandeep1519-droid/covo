@@ -8,8 +8,8 @@ Checked on **18 November 2026**. Terms change, so check again before each releas
 
 | Subscription | Official tool | What the terms say | Covo |
 |---|---|---|---|
-| Claude Pro, Max or Ultra | Claude Code (`claude`) | Allowed, with conditions: you sign in to the **unmodified** Claude Code program yourself, through Anthropic's own sign-in. Other apps may not take, store or pass along your sign-in. | **Built (opt-in):** Covo runs your installed `claude` program in its sandbox. Covo never sees your sign-in. |
-| ChatGPT Plus or Pro | Sign in with ChatGPT (OpenAI's sign-in for apps); Codex CLI (`codex`) | **Allowed for open-source apps on your own computer** (a preview, checked 20 Nov 2026): you approve on OpenAI's page, and use counts against your plan. Paid or hosted apps need OpenAI's approval. Driving the Codex program on its own sign-in is still not covered. | **Planned (Phase 4 M1):** "Continue with ChatGPT" in the app. Covo never reads Codex's sign-in file. Until then, use an OpenAI API key (`covo models add openai`). |
+| Claude Pro, Max or Ultra | Claude Code (`claude`) | Allowed, with conditions: you sign in to the **unmodified** Claude Code program yourself, through Anthropic's own sign-in. Other apps may not take, store or pass along your sign-in. | **Built (opt-in):** Covo runs your installed `claude` program in its sandbox. Covo never sees your sign-in. In the app: Settings → AI models → Connect (Phase 4 M1), after `claude auth status` says you signed in with your Claude account, not an API key. |
+| ChatGPT Plus or Pro | Sign in with ChatGPT (OpenAI's sign-in for apps); Codex CLI (`codex`) | **Allowed for open-source apps on your own computer** (a preview, checked 20 Nov 2026): you approve on OpenAI's page, and use counts against your plan. Paid or hosted apps need OpenAI's approval. Driving the Codex program on its own sign-in is still not covered. | **Built (opt-in, Phase 4 M1):** Settings → AI models → Continue with ChatGPT, or `covo models add chatgpt`. Covo signs in itself and keeps its own tokens in the Keychain; it never reads Codex's sign-in file. |
 | Google AI Pro or Ultra | Gemini CLI (`gemini`), now Antigravity CLI (`agy`) | Gemini CLI's "Login with Google" stopped working for these plans on 18 June 2026. Antigravity's terms forbid accessing the service through third-party software, and Google has suspended accounts for it. | **Not built.** Use a Gemini API key (free tier available: `covo models add gemini`). |
 
 ## Claude (Anthropic)
@@ -81,7 +81,16 @@ What we found:
 - The docs say nothing about scheduled, unattended use of a plan.
 - Driving the Codex program on its own ChatGPT sign-in still isn't covered.
 
-**Decision:** build it in Phase 4 M1 as an opt-in connection. Covo signs in through OpenAI's page, keeps its own sign-in in the Keychain, and never reads `~/.codex/auth.json`. Routines don't use it unless you allow subscriptions for routines (`covo routines subscriptions on`).
+**Decision:** built in Phase 4 M1 as an opt-in connection. Covo signs in through OpenAI's page, keeps its own sign-in in the Keychain, and never reads `~/.codex/auth.json`. Routines don't use it unless you allow subscriptions for routines (`covo routines subscriptions on`).
+
+**How Covo follows the rules** (`packages/models/src/chatgpt.ts`, `responses.ts`):
+- Sign-in: OAuth with PKCE and no client secret, through OpenAI's own page in your browser. The answer comes back to a one-time page on `127.0.0.1` (port 1455, or another free one). Covo checks the `state`, checks OpenAI's signature on the ID token (issuer, audience, expiry, nonce), and checks that you granted `chatgpt.tokens.use.direct` before saving anything.
+- This Mac gets an opaque id once (`urn:uuid:…`); OpenAI's id for Covo on your account (`oaiapp_…`) is kept for signing in again. Neither is a secret.
+- Tokens: in the macOS Keychain only, never in a file, URL or log. The access token lasts an hour. Covo renews it one renewal at a time, because the refresh token changes each time. A renewal OpenAI refuses for good ends the sign-in and asks you to sign in again; a network problem doesn't.
+- Requests: OpenAI's Responses API with `store: false` and `stream: true`; system text as `instructions`; none of the fields the preview rejects. Only `response.completed` counts as a finished reply.
+- Errors: the plan's usage limit says so, with OpenAI's usage page (https://chatgpt.com/settings/usage). Covo never switches you to paid API use behind your back. Your bot's next model takes over only if you gave it one.
+- Wording: the button says "Continue with ChatGPT". The app shows "Using ChatGPT plan" next to the model picker, with "Manage usage", and a one-time welcome note.
+- Sign-out revokes the sign-in at OpenAI, then forgets the tokens.
 
 ## Gemini (Google)
 

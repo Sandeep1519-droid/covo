@@ -2,6 +2,7 @@ import { AnthropicProvider } from "./anthropic.ts";
 import { DEFAULT_CONTEXT, OllamaProvider } from "./ollama.ts";
 import { OpenAICompatibleProvider } from "./openai-compatible.ts";
 import { type Preset, type ProviderKind, presetById, presetForUrl } from "./presets.ts";
+import { ResponsesProvider } from "./responses.ts";
 import type { ModelProvider } from "./types.ts";
 
 // Phase 2 M0: model settings come from environment variables and the provider presets. M1 replaces
@@ -37,6 +38,10 @@ export interface ModelConfig {
   think?: boolean;
   /** How long Ollama keeps the model loaded, e.g. "60s". */
   keepAlive?: string;
+  /** Your ChatGPT plan (openai-responses): a fresh access token for each request. */
+  token?: () => Promise<string>;
+  /** Set when a subscription pays, not per use: "chatgpt" or an engine id. */
+  subscription?: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -104,6 +109,11 @@ export function missingKey(c: ModelConfig): string | undefined {
 }
 
 export function providerFromConfig(c: ModelConfig): ModelProvider {
+  if (c.kind === "openai-responses") {
+    if (!c.token)
+      throw new ModelConfigError("Sign in with ChatGPT first: Settings → AI models, or covo models add chatgpt.");
+    return new ResponsesProvider({ name: c.name, baseUrl: c.baseUrl, model: c.model, token: c.token });
+  }
   if (c.kind === "anthropic") {
     if (!c.apiKey) throw new ModelConfigError(missingKey(c));
     const official = c.baseUrl.replace(/\/+$/, "") === "https://api.anthropic.com";

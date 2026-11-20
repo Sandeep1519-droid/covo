@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./fake-openai": "./src/fake-openai.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",

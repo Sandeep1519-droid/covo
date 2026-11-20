@@ -100,7 +100,7 @@ function userName(): string {
   return fullName;
 }
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
@@ -264,11 +264,15 @@ function models(ctx: Ctx): ApiModel[] {
   return s.connections.map((c) => ({
     name: c.name,
     provider: c.provider,
-    providerLabel: presetById(c.provider)?.label ?? engineById(c.provider)?.label ?? c.provider,
+    providerLabel:
+      c.provider === "chatgpt"
+        ? "ChatGPT plan"
+        : (presetById(c.provider)?.label ?? engineById(c.provider)?.label ?? c.provider),
     model: c.model,
     hasKey: c.keyId !== undefined,
     isDefault: s.default === c.name,
     engine: engineById(c.provider) !== undefined,
+    subscription: c.provider === "chatgpt" || engineById(c.provider) ? c.provider : null,
   }));
 }
 
@@ -727,6 +731,31 @@ export async function handleApi(
       if (m === "DELETE" && id) {
         await removeConnection(ctx.home, ctx.secrets ?? secrets(), id);
         return json(models(ctx));
+      }
+    }
+
+    // Your own AI plans (Phase 4 M1): ChatGPT through Sign in with ChatGPT, Claude through Claude Code.
+    if (a === "subscriptions") {
+      const subs = service.subscriptions;
+      if (!subs) throw new HttpError(503, "Covo's service isn't ready yet.");
+      if (m === "GET" && !id) return json(await subs.status());
+      if (id === "chatgpt") {
+        if (m === "POST" && !action) return json(await subs.startChatGPT(who));
+        if (m === "POST" && action === "cancel") subs.cancelChatGPT();
+        else if (m === "POST" && action === "welcomed") subs.welcomed();
+        else if (m === "PUT" && !action) await subs.setChatGPTModel((await body<Record<string, unknown>>(req)).model);
+        else if (m === "DELETE" && !action) await subs.signOutChatGPT(who);
+        else throw new HttpError(404, "Not found.");
+        service.announce({ type: "changed", what: "models" });
+        return json(await subs.status());
+      }
+      if (id === "claude-code") {
+        if (m === "POST" && action === "check") await subs.checkClaude();
+        else if (m === "POST" && !action) await subs.connectClaude(await body(req), who);
+        else if (m === "DELETE" && !action) await subs.disconnectClaude(who);
+        else throw new HttpError(404, "Not found.");
+        service.announce({ type: "changed", what: "models" });
+        return json(await subs.status());
       }
     }
 

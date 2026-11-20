@@ -1,5 +1,19 @@
 export type { AnthropicOptions } from "./anthropic.ts";
 export { AnthropicProvider, listAnthropicModels, toAnthropic } from "./anthropic.ts";
+export type { ChatGPTAccount, ChatGPTModel, ChatGPTOptions, SignIn } from "./chatgpt.ts";
+export {
+  beginChatGPTSignIn,
+  CHATGPT,
+  ChatGPTError,
+  ChatGPTSignInEnded,
+  chatgptAccessToken,
+  chatgptModels,
+  chatgptSignedIn,
+  markWelcomed,
+  readAccount,
+  signOutChatGPT,
+  verifyIdToken,
+} from "./chatgpt.ts";
 export type { ModelConfig } from "./config.ts";
 export {
   DEFAULT_MODEL,
@@ -53,6 +67,8 @@ export type { Preset, ProviderKind } from "./presets.ts";
 export { PRESETS, presetById, presetForUrl } from "./presets.ts";
 export type { Price, PriceLookup } from "./prices.ts";
 export { CAUTIOUS_ESTIMATE, costOf, loadUserPrices, PRICES_AS_OF, priceFor, pricesPath } from "./prices.ts";
+export type { ResponsesOptions } from "./responses.ts";
+export { parseResponsesStream, planError, ResponsesProvider, toResponsesInput } from "./responses.ts";
 export type {
   ChatMessage,
   ChatRequest,

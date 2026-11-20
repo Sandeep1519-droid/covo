@@ -249,6 +249,24 @@ export class ClaudeCodeEngine implements Engine {
     };
   }
 
+  /** Asks the program whether you're signed in (`claude auth status`): exit 0 = yes, JSON says how. */
+  async authStatus(
+    sandbox: Sandbox,
+    t: { ws: string; tmp: string; home: string },
+  ): Promise<{ signedIn: boolean | null; method: string | null; detail?: string }> {
+    if (!existsSync(this.o.binary)) return { signedIn: null, method: null, detail: `not found at ${this.o.binary}` };
+    const r = await sandbox.exec([this.o.binary, "auth", "status"], { ...this.sandboxOptions(t), timeoutMs: 30_000 });
+    if (r.timedOut) return { signedIn: null, method: null, detail: "it didn't answer in 30 seconds" };
+    let method: string | null = null;
+    try {
+      const j = JSON.parse(r.stdout) as { authMethod?: unknown };
+      if (typeof j.authMethod === "string") method = j.authMethod;
+    } catch {}
+    if (r.code !== 0 && r.code !== 1)
+      return { signedIn: null, method, detail: (r.stderr.trim() || r.stdout.trim()).split("\n")[0] ?? "" };
+    return { signedIn: r.code === 0 && method !== "none", method };
+  }
+
   /** Starts the program in its sandbox and asks its version: no model use, nothing sent. */
   async version(
     sandbox: Sandbox,

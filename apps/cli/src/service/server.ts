@@ -20,6 +20,7 @@ import { serviceHealth, socketPath } from "./client.ts";
 import { apiToken, Gate, RefusalLog } from "./gate.ts";
 import { PhoneManager } from "./phone.ts";
 import { RoutineScheduler } from "./routines.ts";
+import { Subscriptions } from "./subscriptions.ts";
 import { defaultUiDir, uiFile } from "./ui.ts";
 
 // covod, Covo's background service (Phase 3 M0). One process runs every bot task, so a task
@@ -62,6 +63,8 @@ let jobSeq = 0;
 export class Service {
   /** Starts routines on time and makes the daily summary (set by serve()). */
   scheduler?: RoutineScheduler;
+  /** Your own AI plans, from the app (Phase 4 M1). */
+  subscriptions?: Subscriptions;
   private readonly jobs: Job[] = [];
   private readonly watchers = new Set<(m: ServiceMessage) => void>();
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -310,6 +313,8 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
   const scheduler = new RoutineScheduler(ctx, service);
   service.scheduler = scheduler;
   scheduler.start();
+  // Your own AI plans, from the app (Phase 4 M1).
+  service.subscriptions = new Subscriptions(ctx, service);
   const wanted = ctx.env.COVO_PORT !== undefined ? Number(ctx.env.COVO_PORT) : API_PORT;
   const gate = new Gate(apiToken(ctx.home), wanted, ctx.now);
   const refusals = new RefusalLog((detail) => {

@@ -16,7 +16,7 @@ export interface Price {
 }
 
 export interface PriceLookup extends Price {
-  source: "built-in" | "yours" | "local" | "estimate";
+  source: "built-in" | "yours" | "local" | "plan" | "estimate";
 }
 
 /** When the built-in prices were last checked. */
@@ -43,6 +43,8 @@ const BUILT_IN: Record<string, Price> = {
 export const CAUTIOUS_ESTIMATE: Price = { in: 5, out: 25 };
 
 const LOCAL_PROVIDERS = new Set(["ollama", "lmstudio", "mock"]);
+/** Paid by a subscription you already have: a flat fee, so nothing to count (Phase 4 M1). */
+const PLAN_PROVIDERS = new Set(["chatgpt"]);
 
 export const pricesPath = (home: string) => join(home, "prices.json");
 
@@ -73,6 +75,7 @@ export function priceFor(providerId: string, user: Record<string, Price> = {}): 
   const mine = user[model] ?? user[providerId];
   if (mine) return { ...mine, source: "yours" };
   if (LOCAL_PROVIDERS.has(provider)) return { in: 0, out: 0, source: "local" };
+  if (PLAN_PROVIDERS.has(provider)) return { in: 0, out: 0, source: "plan" };
   const known = BUILT_IN[model];
   if (known) return { ...known, source: "built-in" };
   if (model.endsWith(":free")) return { in: 0, out: 0, source: "built-in" };

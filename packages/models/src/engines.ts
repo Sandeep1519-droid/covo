@@ -13,6 +13,12 @@ export interface EngineInfo {
   models: string[];
   /** Name suggested for the saved connection. */
   suggestedName: string;
+  /** Where its installers put it, for a service whose PATH is short ("~" is your home folder). */
+  knownPaths: string[];
+  /** The official install command, shown in the app. */
+  install: string;
+  /** How to sign in from a terminal. */
+  signIn: string;
 }
 
 export const ENGINES: EngineInfo[] = [
@@ -24,6 +30,9 @@ export const ENGINES: EngineInfo[] = [
     installUrl: "https://code.claude.com/docs/en/setup",
     models: ["default", "sonnet", "opus", "haiku", "fable"],
     suggestedName: "claude-sub",
+    knownPaths: ["~/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude", "~/.claude/local/claude"],
+    install: "curl -fsSL https://claude.ai/install.sh | bash",
+    signIn: "claude auth login",
   },
 ];
 

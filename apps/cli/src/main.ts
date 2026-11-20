@@ -105,6 +105,8 @@ export interface Ctx {
   launchctl?: Launchctl;
   /** Tests replace opening the browser (covo app). */
   openUrl?: (url: string) => boolean;
+  /** Tests stand in for `claude auth status`. */
+  engineSignIn?: (id: string) => Promise<{ signedIn: boolean | null; method: string | null }>;
   /** Tests learn when `covo service run` is up. */
   serviceStarted?: (r: Running) => void;
   /** Tests replace Telegram (covo phone, and the service's phone link). */
@@ -133,6 +135,7 @@ export async function main(
       | "launchctl"
       | "serviceStarted"
       | "openUrl"
+      | "engineSignIn"
       | "telegram"
     >
   > = {},

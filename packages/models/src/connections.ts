@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { SecretStore } from "@covo/platform";
+import { CHATGPT, chatgptAccessToken } from "./chatgpt.ts";
 import { type ModelConfig, ModelConfigError, modelConfig } from "./config.ts";
 import { engineById } from "./engines.ts";
 import { presetById } from "./presets.ts";
@@ -13,7 +14,7 @@ import { presetById } from "./presets.ts";
 export interface Connection {
   /** Short name you use: "claude", "gemini", "local". */
   name: string;
-  /** Preset id (anthropic, gemini, ollama, …), an engine id (claude-code), or "custom". */
+  /** Preset id (anthropic, gemini, ollama, …), an engine id (claude-code), "chatgpt" (your plan), or "custom". */
   provider: string;
   model: string;
   /** For custom services or proxies. */
@@ -149,9 +150,10 @@ export async function addConnection(home: string, store: SecretStore, a: AddConn
   if (!NAME_RE.test(a.name)) {
     throw new ModelConfigError(`"${a.name}" can't be a name: use lowercase letters, digits and dashes (up to 32).`);
   }
-  if (a.provider !== "custom" && !presetById(a.provider) && !engineById(a.provider))
+  if (a.provider !== "custom" && a.provider !== "chatgpt" && !presetById(a.provider) && !engineById(a.provider))
     throw new ModelConfigError(`Unknown provider "${a.provider}".`);
-  if (engineById(a.provider) && a.key) throw new ModelConfigError("An engine uses its own sign-in, not a key.");
+  if ((engineById(a.provider) || a.provider === "chatgpt") && a.key)
+    throw new ModelConfigError("A subscription uses its own sign-in, not a key.");
   const s = loadSettings(home);
   if (s.connections.some((c) => c.name === a.name)) {
     throw new ModelConfigError(`There's already a model called "${a.name}". Remove it first or pick another name.`);
@@ -224,6 +226,26 @@ export async function resolveModel(
   if (use && !byName && (engine || use === "local")) {
     return modelConfig(use === "local" ? env : { ...env, COVO_MODEL: use });
   }
+  // Your ChatGPT plan (Sign in with ChatGPT): Covo's own sign-in, in the Keychain, renewed as needed.
+  if (conn.provider === "chatgpt") {
+    const auth = {
+      home,
+      store,
+      ...(env.COVO_CHATGPT_AUTH ? { authBase: env.COVO_CHATGPT_AUTH } : {}),
+      ...(env.COVO_CHATGPT_API ? { apiBase: env.COVO_CHATGPT_API } : {}),
+    };
+    return {
+      name: "chatgpt",
+      label: "ChatGPT (your plan)",
+      kind: "openai-responses",
+      baseUrl: env.COVO_CHATGPT_API ?? CHATGPT.api,
+      model: use && !byName ? use : conn.model,
+      local: false,
+      connection: conn.name,
+      subscription: "chatgpt",
+      token: () => chatgptAccessToken(auth),
+    };
+  }
   if (engine) {
     return {
       name: engine.id,
@@ -234,6 +256,7 @@ export async function resolveModel(
       local: false,
       connection: conn.name,
       engine: engine.id,
+      subscription: engine.id,
     };
   }
   const cfg: Resolved = {
