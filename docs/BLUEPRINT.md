@@ -1516,7 +1516,7 @@ The local model writes the one-line check-in summary from the last steps (cheap,
 |---|---|---|---|
 | **1** ✅ | Sandboxed runner core | Run a bot on a safe copy, review, keep or discard, verify the log | done |
 | **2** ✅ | Connect any AI, automation and control | Add your Claude/GPT/Gemini key or subscription; bots keep undoable work by themselves; spending limits; power profiles ([PHASE2.md](PHASE2.md)) | done |
-| **3** | The app and your phone | Use the chat app from the Figma design; approve from your phone (Telegram); schedule routines with daily summaries; menu bar icon ([PHASE3.md](PHASE3.md)) | M0–M6 done; M7 ≈ 2–3 days |
+| **3** ✅ | The app and your phone | Use the chat app from the Figma design; approve from your phone (Telegram); schedule routines with daily summaries; menu bar icon ([PHASE3.md](PHASE3.md)) | done |
 | **4** | Reach and abilities | Use your ChatGPT or Claude plan; bots work with Mail, Calendar and other services, use a browser, remember you, load shared skills and answer on Slack, Discord and iMessage; install with one command ([PHASE4.md](PHASE4.md)) | ≈ 6–8 weeks |
 | **5** | Vault, signed rules, watchdog | Touch ID guards limits and rules; "always allow" rules; stuck bots stopped and rolled back | ≈ 2–3 weeks |
 | **6** | Teach Mode, importers, Windows, hardening | Teach a workflow twice; import MausBot and Rakazo playbooks; start the Windows port; prompt-injection test suite | ≈ 3–4 weeks |

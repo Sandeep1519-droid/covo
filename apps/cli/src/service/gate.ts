@@ -46,9 +46,12 @@ function cookieValue(req: Request, name: string): string | undefined {
   return undefined;
 }
 
+/** Why a request was refused. */
+export type Refusal = "address" | "website" | "token" | "session" | "origin" | "code" | "format";
+
 export type Verdict =
   | { ok: true; by: "token" | "session" }
-  | { ok: false; status: 400 | 401 | 403 | 415; error: string };
+  | { ok: false; status: 400 | 401 | 403 | 415; error: string; reason: Refusal };
 
 export class Gate {
   private readonly codes = new Map<string, number>();
@@ -72,11 +75,16 @@ export class Gate {
   checkPlace(req: Request): Verdict | null {
     const host = req.headers.get("host") ?? "";
     if (!this.origins.some((o) => o === `http://${host}`)) {
-      return { ok: false, status: 403, error: "Wrong address. Covo's API only answers at 127.0.0.1." };
+      return {
+        ok: false,
+        status: 403,
+        reason: "address",
+        error: "Wrong address. Covo's API only answers at 127.0.0.1.",
+      };
     }
     const origin = req.headers.get("origin");
     if (origin !== null && !this.origins.includes(origin)) {
-      return { ok: false, status: 403, error: "Requests from other websites aren't allowed." };
+      return { ok: false, status: 403, reason: "website", error: "Requests from other websites aren't allowed." };
     }
     return null;
   }
@@ -90,16 +98,26 @@ export class Gate {
     if (sid && exp !== undefined) {
       if (exp < this.now()) {
         this.sessions.delete(sid);
-        return { ok: false, status: 401, error: "Your session ended. Open the app again with: covo app" };
+        return {
+          ok: false,
+          status: 401,
+          reason: "session",
+          error: "Your session ended. Open the app again with: covo app",
+        };
       }
       if (req.method !== "GET" && req.method !== "HEAD") {
         if (!this.origins.includes(req.headers.get("origin") ?? "")) {
-          return { ok: false, status: 403, error: "Changes must come from Covo's own app." };
+          return { ok: false, status: 403, reason: "origin", error: "Changes must come from Covo's own app." };
         }
       }
       return { ok: true, by: "session" };
     }
-    return { ok: false, status: 401, error: "Sign in first: open the app with covo app, or send the API token." };
+    return {
+      ok: false,
+      status: 401,
+      reason: "token",
+      error: "Sign in first: open the app with covo app, or send the API token.",
+    };
   }
 
   /** A one-time pairing code (asked for over the private socket only). */
@@ -124,5 +142,52 @@ export class Gate {
   endSession(req: Request): void {
     const sid = cookieValue(req, COOKIE);
     if (sid) this.sessions.delete(sid);
+  }
+}
+
+const HOUR = 3_600_000;
+const clip = (s: string | null, n: number) => (s === null ? null : s.slice(0, n));
+
+/**
+ * Refused requests go to the activity log (Phase 3 M7): another website or address, no token or a
+ * wrong one, a change without the app's own origin, a bad sign-in code. At most once an hour for each
+ * kind of refusal and each place it came from, so a page hammering the port can't flood the log; the
+ * next entry counts the ones in between. The token, cookies and codes are never logged.
+ */
+export class RefusalLog {
+  private readonly seen = new Map<string, { at: number; more: number }>();
+
+  constructor(
+    private readonly write: (detail: Record<string, unknown>) => void,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  note(req: Request, reason: Refusal, status: number): void {
+    if (reason === "session") return; // an old session ran out: routine, not an attack
+    const origin = clip(req.headers.get("origin"), 120);
+    const host = clip(req.headers.get("host"), 120);
+    const key = `${reason}|${origin ?? host ?? ""}`;
+    const last = this.seen.get(key);
+    if (last && this.now() - last.at < HOUR) {
+      last.more++;
+      return;
+    }
+    if (this.seen.size > 500) this.seen.clear();
+    this.seen.set(key, { at: this.now(), more: 0 });
+    let path = "";
+    try {
+      path = new URL(req.url).pathname.slice(0, 200);
+    } catch {}
+    try {
+      this.write({
+        reason,
+        status,
+        method: req.method,
+        path,
+        host,
+        origin,
+        ...(last?.more ? { notLogged: last.more } : {}),
+      });
+    } catch {} // logging must never break the API
   }
 }

@@ -1,6 +1,6 @@
 # Phase 3 Plan: The App and Your Phone
 
-> Status: **in progress** (M0–M6 done), 20 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI), ADR-012 (phase order) and ADR-013 (what comes next: [PHASE4.md](PHASE4.md)). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
+> Status: **done** (M0–M7), 20 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI), ADR-012 (phase order) and ADR-013 (what comes next: [PHASE4.md](PHASE4.md)). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
 
 ## 1. Goal
 
@@ -142,7 +142,20 @@ Covo stays local. Nothing listens beyond your own Mac, and every request to the 
   - Routines never use command-line subscriptions (Claude Code) unless you turn that on. Otherwise the bot's next model, or the free local one, does the work.
 - **Daily summary:** at the time you pick (18:00 to start with), in your main bot's chat. It covers what ran since the last one, what changed (with Undo), what was spent against the daily limit and what's waiting. It goes to your phone too, short and never with file contents, unless the phone is set to only what needs you. A quiet routine's "finished" message isn't sent to the phone.
 - **Verified** with 22 new tests (schedules, routines, the service running them on time, missed runs, pauses and quiet hours, subscriptions, the summary, the API, the commands and the phone). Also live on a throwaway service: a routine made in the app for 2 minutes later ran by itself, and the summary listed it.) | 3–4 days |
-| **M7** | **Safety check and wrap-up.** The acceptance demo below and README updates. The public demo video moves to Phase 4 M8, when bots can read email and browse. Attack tests:<br>• a web page tries to call the service (cross-site request, DNS rebinding)<br>• requests with a missing or wrong token<br>• a Telegram message from a stranger<br>• a replayed or edited approval<br>• a run that tries to read the service token.<br>All are refused and logged. | The acceptance demo passes end to end | 2–3 days |
+| **M7** | **Safety check and wrap-up.** The acceptance demo below and README updates. The public demo video moves to Phase 4 M8, when bots can read email and browse. Attack tests:<br>• a web page tries to call the service (cross-site request, DNS rebinding)<br>• requests with a missing or wrong token<br>• a Telegram message from a stranger<br>• a replayed or edited approval<br>• a run that tries to read the service token.<br>All are refused and logged. | The acceptance demo passes end to end (done:
+- **Attack tests** (`apps/cli/src/service/attacks.test.ts`). Each is refused, changes nothing and is logged:
+  - a page on another website, or another name for this Mac (DNS rebinding);
+  - no token, or a wrong one (a guessed token never reaches the log);
+  - a change carried only by the app's cookie, without the app's own origin (cross-site request forgery), and guessed or reused sign-in codes;
+  - an edited, replayed or late answer to an approval, in the app or on the phone;
+  - a stranger on Telegram;
+  - a bot that tries to read the service's token or call its API (the sandbox stops it);
+  - a key typed into the app is in the Keychain and nowhere on disk.
+- **Logged:** refused requests now go to the activity log (`api.refused`): at most once an hour for each kind and source, with a count of the ones in between, so a page can't flood the log. Refused approval answers are logged too (`approval.refused`). Tokens, cookies and codes are never logged.
+- **The acceptance demo** above runs end to end as a test (`demo.test.ts`, with a stand-in model and Telegram). The routine line needed its own `--limit 1`: the demo sets the bot's task limit to $0.001, which would otherwise pause the routine too.
+- **Measured on your Mac:** the service uses 27 MB (limit 120 MB). The Mac app uses 40 MB, plus 108 MB for its window's web view and 20 MB for the menu bar panel's (limit for the window: 150 MB).
+- **Chat:** it now stays at the newest card while cards fill in, unless you've scrolled up to read.
+- The public demo video moved to Phase 4 M8.) | 2–3 days |
 
 Total: about **4–5 weeks** part-time.
 
@@ -156,7 +169,7 @@ covo app                              # Covo.app opens, signed in, in your syste
 covo phone connect                    # create a Telegram bot, pair your phone
 covo bots set "Docs helper" --task-limit 0.001
 # Chat: "summarise every file in docs/" → pause → card in the app AND on the phone → Approve on the phone
-covo routines add "Daily notes" --bot "Docs helper" --every "every day at 09:32" "summarise NOTES.md"   # two minutes from now
+covo routines add "Daily notes" --bot "Docs helper" --every "every day at 09:32" --limit 1 "summarise NOTES.md"   # two minutes from now; its own limit
 # Two minutes later it runs by itself; `covo summary now` lists both runs
 curl http://127.0.0.1:7420/api/runs   # 401: no token
 covo audit verify                     # chain OK, phone approval recorded as decided_by phone

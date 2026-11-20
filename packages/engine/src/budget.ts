@@ -200,6 +200,29 @@ export class Budget {
   }
 }
 
+/**
+ * An answer that was refused, so nothing changed (Phase 3 M7): it was for a different version of the
+ * request, it came after another answer (a replay) or too late, or the request isn't there.
+ */
+export type RefusedAnswer = "changed" | "already answered" | "expired" | "unknown";
+
+/** Logs a refused answer to an approval. */
+export function refuseAnswer(db: Database, id: string, reason: RefusedAnswer, by: string, now: () => number): void {
+  const run = db.query<{ run_id: string }, [string]>("SELECT run_id FROM approvals WHERE id = ?").get(id);
+  appendAudit(
+    db,
+    {
+      actor: by.startsWith("you") ? "user" : "system",
+      action: "approval.refused",
+      runId: run?.run_id,
+      target: id,
+      decision: "deny",
+      detail: { reason, by },
+    },
+    now,
+  );
+}
+
 /** Records a decision on a pending approval. Returns false if it wasn't pending any more. */
 export function decide(
   db: Database,

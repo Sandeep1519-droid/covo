@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { covoPaths } from "@covo/core";
 import { appendAudit, migrate, openDb } from "@covo/db";
-import { changesOf, decide, startOfLocalDay } from "@covo/engine";
+import { changesOf, decide, refuseAnswer, startOfLocalDay } from "@covo/engine";
 import { type PhoneConfig, readOffset, writeOffset } from "./config.ts";
 import {
   approvalButtons,
@@ -205,14 +205,23 @@ export class PhoneLink {
           "SELECT status, payload_hash, expires_at FROM approvals WHERE id = ?",
         )
         .get(id);
-      if (!a) return { note: "That request isn't there any more.", close: false };
-      if (a.status !== "pending")
+      // Refused answers change nothing, and are logged.
+      if (!a) {
+        refuseAnswer(db, id, "unknown", "you (phone)", this.now);
+        return { note: "That request isn't there any more.", close: false };
+      }
+      if (a.status !== "pending") {
+        refuseAnswer(db, id, "already answered", "you (phone)", this.now);
         return { note: `That was already ${a.status === "approved" ? "allowed" : a.status}.`, close: true };
+      }
       // The answer applies only to the exact request shown on the card.
-      if (!a.payload_hash.startsWith(hash))
+      if (!a.payload_hash.startsWith(hash)) {
+        refuseAnswer(db, id, "changed", "you (phone)", this.now);
         return { note: "That request changed. Look at it on your Mac.", close: false };
+      }
       if (a.expires_at < this.now()) {
         decide(db, id, "expired", "nobody answered in 24 hours", this.now);
+        refuseAnswer(db, id, "expired", "you (phone)", this.now);
         return { note: "That request expired.", close: true };
       }
       decide(db, id, answer === "y" ? "approved" : "denied", "you (phone)", this.now);

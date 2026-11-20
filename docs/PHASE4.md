@@ -1,6 +1,6 @@
 # Phase 4 Plan: Reach and Abilities
 
-> Status: **planned**, 20 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-013 (compete head-on). Phase 3 ends with M7 ([PHASE3.md](PHASE3.md)). Anything here can change later. The decisions in §7 need your OK before M1 starts.
+> Status: **planned**, 20 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-013 (compete head-on). Phase 3 ends with M7 ([PHASE3.md](PHASE3.md)). Anything here can change later. You accepted the recommended choice in each decision of §7 on 20 Nov 2026.
 
 ## 1. Goal
 

@@ -44,7 +44,9 @@ import {
   parseSchedule,
   pauseState,
   postSummary,
+  type RefusedAnswer,
   RunError,
+  refuseAnswer,
   removeRoutine,
   reviewRun,
   routineFromChat,
@@ -526,13 +528,21 @@ function decideApproval(ctx: Ctx, id: string, b: Record<string, unknown>, by: st
       )
       .get(id);
     if (!a) throw new HttpError(404, "No such request.");
-    if (a.status !== "pending") throw new HttpError(409, `That request was already ${a.status}.`);
+    // A refused answer changes nothing, and is logged (an edited or replayed answer is an attack sign).
+    const refuse = (reason: RefusedAnswer, error: string): never => {
+      refuseAnswer(db, id, reason, by, ctx.now);
+      throw new HttpError(409, error);
+    };
+    if (a.status !== "pending") refuse("already answered", `That request was already ${a.status}.`);
     // The answer applies only to the exact request the person saw.
     if (typeof b.payloadHash !== "string" || b.payloadHash !== a.payload_hash)
-      throw new HttpError(409, "That request has changed since you saw it. Look at it again.");
-    if (a.expires_at < ctx.now()) throw new HttpError(409, "That request has expired.");
+      refuse("changed", "That request has changed since you saw it. Look at it again.");
+    if (a.expires_at < ctx.now()) {
+      decide(db, id, "expired", "nobody answered in 24 hours", ctx.now);
+      refuse("expired", "That request has expired.");
+    }
     const status = b.decision === "approve" ? "approved" : "denied";
-    if (!decide(db, id, status, by, ctx.now)) throw new HttpError(409, "That request was already answered.");
+    if (!decide(db, id, status, by, ctx.now)) refuse("already answered", "That request was already answered.");
     return { status };
   });
 }

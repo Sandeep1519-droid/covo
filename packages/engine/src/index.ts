@@ -1,7 +1,7 @@
 export type { ApprovalStreak, Bot, BotChanges, Level, NewBot } from "./bots.ts";
 export { approvalStreak, archiveBot, createBot, findBot, LEVELS, listBots, updateBot } from "./bots.ts";
 export type { AskApproval, SpendLimits, SpendRequest } from "./budget.ts";
-export { Budget, decide, startOfLocalDay, usd } from "./budget.ts";
+export { Budget, decide, type RefusedAnswer, refuseAnswer, startOfLocalDay, usd } from "./budget.ts";
 export type { ChatMessage, NewMessage } from "./chat.ts";
 export { addBotMessage, addMessage, CONTEXT_TURNS, failMessage, linkRun, listMessages } from "./chat.ts";
 export type { Engine, EngineResult, EngineTask } from "./engines.ts";

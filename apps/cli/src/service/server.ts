@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { API_PORT } from "@covo/api";
 import { covoPaths, VERSION } from "@covo/core";
-import { openDb } from "@covo/db";
+import { appendAudit, openDb } from "@covo/db";
 import {
   getRoutine,
   isPaused,
@@ -17,7 +17,7 @@ import type { Ctx } from "../main.ts";
 import { type Prepared, PrepareError, prepareRun, type RunHeader, type RunRequest } from "../runner.ts";
 import { json as apiJson, handleApi } from "./api.ts";
 import { serviceHealth, socketPath } from "./client.ts";
-import { apiToken, Gate } from "./gate.ts";
+import { apiToken, Gate, RefusalLog } from "./gate.ts";
 import { PhoneManager } from "./phone.ts";
 import { RoutineScheduler } from "./routines.ts";
 import { defaultUiDir, uiFile } from "./ui.ts";
@@ -312,6 +312,14 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
   scheduler.start();
   const wanted = ctx.env.COVO_PORT !== undefined ? Number(ctx.env.COVO_PORT) : API_PORT;
   const gate = new Gate(apiToken(ctx.home), wanted, ctx.now);
+  const refusals = new RefusalLog((detail) => {
+    const db = openDb(covoPaths(ctx.home).db);
+    try {
+      appendAudit(db, { actor: "system", action: "api.refused", decision: "deny", detail }, ctx.now);
+    } finally {
+      db.close();
+    }
+  }, ctx.now);
   const uiDir = ctx.env.COVO_UI_DIR ?? defaultUiDir();
 
   // The local API for the app: 127.0.0.1 only, and every request passes the gate (gate.ts).
@@ -323,25 +331,33 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
       port: wanted,
       async fetch(req) {
         const refused = gate.checkPlace(req);
-        if (refused && !refused.ok) return apiJson({ error: refused.error }, refused.status);
+        if (refused && !refused.ok) {
+          refusals.note(req, refused.reason, refused.status);
+          return apiJson({ error: refused.error }, refused.status);
+        }
         const path = new URL(req.url).pathname;
         if (path === "/" || path === "/ui") return new Response(null, { status: 302, headers: { location: "/ui/" } });
         if (req.method === "GET" && path.startsWith("/ui/")) return uiFile(uiDir, path.slice(4));
         if (req.method === "POST" && path === "/api/pair") {
-          if (!(req.headers.get("content-type") ?? "").startsWith("application/json"))
+          if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) {
+            refusals.note(req, "format", 415);
             return apiJson({ error: "Send JSON." }, 415);
+          }
           let code: unknown;
           try {
             code = ((await req.json()) as { code?: unknown }).code;
           } catch {}
           const cookie = gate.pair(code);
-          return cookie
-            ? apiJson({ ok: true }, 200, { "set-cookie": cookie })
-            : apiJson({ error: "That sign-in code has expired or was already used. Run: covo app" }, 401);
+          if (cookie) return apiJson({ ok: true }, 200, { "set-cookie": cookie });
+          refusals.note(req, "code", 401);
+          return apiJson({ error: "That sign-in code has expired or was already used. Run: covo app" }, 401);
         }
         if (path.startsWith("/api/")) {
           const v = gate.checkAuth(req);
-          if (!v.ok) return apiJson({ error: v.error }, v.status);
+          if (!v.ok) {
+            refusals.note(req, v.reason, v.status);
+            return apiJson({ error: v.error }, v.status);
+          }
           return handleApi(ctx, service, gate, req, v.by);
         }
         return apiJson({ error: "Not found." }, 404);

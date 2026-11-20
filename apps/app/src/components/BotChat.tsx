@@ -58,6 +58,9 @@ export function BotChat({
   const [detailsTab, setDetailsTab] = useState<DetailsTab>("about");
   const [editing, setEditing] = useState<ApiRoutine | null | undefined>(undefined);
   const end = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  /** You're at the bottom of the chat (or haven't scrolled up). */
+  const pinned = useRef(true);
 
   const model = (modelName && data.models.find((m) => m.name === modelName)) || modelFor(data, bot);
   const known = useRef(new Set<string>());
@@ -98,8 +101,32 @@ export function BotChat({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: follow the newest message
   useEffect(() => {
+    pinned.current = true;
     end.current?.scrollIntoView({ block: "end" });
   }, [messages?.length, latest?.state, bot.id]);
+
+  // Cards fill in after they appear (a task's changes load a moment later), which made the chat stop
+  // short of the newest one. While you're at the bottom, stay there as the chat grows; once you scroll
+  // up to read, it stays where you are.
+  const hasMessages = (timeline?.length ?? 0) > 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: set up again when the message list appears or the bot changes
+  useEffect(() => {
+    const box = scroller.current;
+    const list = box?.querySelector(".messages");
+    if (!box || !list) return;
+    const onScroll = () => {
+      pinned.current = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    };
+    box.addEventListener("scroll", onScroll, { passive: true });
+    const grow = new ResizeObserver(() => {
+      if (pinned.current) box.scrollTop = box.scrollHeight;
+    });
+    grow.observe(list);
+    return () => {
+      box.removeEventListener("scroll", onScroll);
+      grow.disconnect();
+    };
+  }, [hasMessages, bot.id]);
 
   const send = async (goal = text.trim()) => {
     if (!goal) return;
@@ -157,7 +184,7 @@ export function BotChat({
 
       <div className="chat-body">
         <div className="chat-main">
-          <div className="chat-scroll">
+          <div className="chat-scroll" ref={scroller}>
             {timeline === null ? null : timeline.length === 0 ? (
               <div className="chat-empty">
                 <Avatar shape={bot.shape} color={bot.color} size={72} />
