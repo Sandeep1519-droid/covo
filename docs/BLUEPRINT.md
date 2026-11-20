@@ -1510,18 +1510,18 @@ The local model writes the one-line check-in summary from the last steps (cheap,
 
 ## 5. Solo Developer Phased Execution Plan
 
-### Revised roadmap (2026-11-18, see ADR-008 to ADR-012)
+### Revised roadmap (2026-11-20, see ADR-013; the 2026-11-18 order is in ADR-008 to ADR-012)
 
 | Phase | Theme | You can… | Est. |
 |---|---|---|---|
 | **1** ✅ | Sandboxed runner core | Run a bot on a safe copy, review, keep or discard, verify the log | done |
 | **2** ✅ | Connect any AI, automation and control | Add your Claude/GPT/Gemini key or subscription; bots keep undoable work by themselves; spending limits; power profiles ([PHASE2.md](PHASE2.md)) | done |
-| **3** | The app and your phone | Use the chat app from the Figma design; approve from your phone (Telegram); schedule routines with daily summaries; menu bar icon ([PHASE3.md](PHASE3.md)) | ≈ 4–5 weeks |
-| **4** | Vault, signed rules, memory, watchdog | Touch ID guards limits and rules; internet allowlist; memory you can read and undo; stuck bots stopped and rolled back | ≈ 3 weeks |
-| **5** | Browser and Take the Wheel | Bots use web apps with your sessions; risky clicks checked; you step in for 2FA | ≈ 3 weeks |
-| **6** | Teach Mode, importer, Windows, hardening | Teach a workflow twice; import OpenClaw/Hermes skills; start the Windows port; prompt-injection test suite | ≈ 3–4 weeks |
+| **3** | The app and your phone | Use the chat app from the Figma design; approve from your phone (Telegram); schedule routines with daily summaries; menu bar icon ([PHASE3.md](PHASE3.md)) | M0–M6 done; M7 ≈ 2–3 days |
+| **4** | Reach and abilities | Use your ChatGPT or Claude plan; bots work with Mail, Calendar and other services, use a browser, remember you, load shared skills and answer on Slack, Discord and iMessage; install with one command ([PHASE4.md](PHASE4.md)) | ≈ 6–8 weeks |
+| **5** | Vault, signed rules, watchdog | Touch ID guards limits and rules; "always allow" rules; stuck bots stopped and rolled back | ≈ 2–3 weeks |
+| **6** | Teach Mode, importers, Windows, hardening | Teach a workflow twice; import MausBot and Rakazo playbooks; start the Windows port; prompt-injection test suite | ≈ 3–4 weeks |
 
-The phase texts below were written before this review. Their build items still apply, but they are regrouped as above: Phase 2's vault and policy move to Phase 4, the dashboard moves to Phase 3, and provider work moves to Phase 2.
+The phase texts below were written before these reviews. Their build items still apply, regrouped as above (ADR-012, ADR-013): provider work is in Phase 2 and the dashboard in Phase 3; the browser, memory, the internet allowlist and the OpenClaw/Hermes skill import are in Phase 4; the vault and signed policy are in Phase 5.
 
 
 Each phase ends with a demo script you can run. Estimates assume evenings/weekends; adjust freely.
@@ -1764,3 +1764,15 @@ A profile also sets model keep-alive, browser slots, and slowdown on battery or 
 ### ADR-012 — Phase order: connect any AI first, then the app
 
 The app and phone approvals move earlier because every competitor has them and nobody will use a CLI-only product. The new order is in §5 "Revised roadmap". The detailed specs in §4 and the old phase texts stay as reference.
+
+### ADR-013 — Compete head-on: match the everyday features, keep trust as the edge (2026-11-20)
+
+After Phase 3 M6 you asked to compete with the other bots directly, in both the app's design and how it works. A check on 20 Nov 2026 showed what people choose OpenClaw and Hermes Agent for: they answer on 15 or more chat apps, use a browser, email and other apps, remember the user, share skills in a common format and run on a schedule. Covo had schedules (Phase 3 M6), any AI, the app and the phone, but its bots could only work on files.
+
+Decisions:
+- **Match the everyday core.** Use your own AI subscription; connect email, calendar and other services; use a browser; remember you; load shared skills; answer on more chat apps; install with one command. That is the new Phase 4 ([PHASE4.md](PHASE4.md)). The long tail (dozens of chat apps, every integration) stays out of reach for a solo project, so ADR-008's point about feature count still holds there.
+- **Trust stays the edge.** Every new ability goes through the same checkpoint as file changes: the sandbox, the levels and approvals of ADR-010, spending limits and the activity log. Each connection may reach only its own websites. Reading, searching and drafting happen by themselves; sending, paying, deleting for good and logging in ask.
+- **Compatible, not a rival.** Covo reads the formats people already have: Agent Skills (`SKILL.md`), `SOUL.md` personas, `USER.md` and `MEMORY.md` memory, and MCP servers. Moving to Covo should cost nothing.
+- **The design stays.** The chat-first app (ADR-006) and the Figma file are kept. Most of the new parts are already designed: first-run setup (A1–A8), Connect apps (S3), personality and memory (B2, B3, M2), tools (B6), importing skills (K3), the browser view with take-over (R6) and saved logins (R9). The engine catches up with the design.
+- **New phase order**, replacing ADR-012's: Phase 4 is reach and abilities. The vault, signed rules and watchdog move to Phase 5. Teach Mode, the MausBot and Rakazo importers, Windows and hardening stay in Phase 6. The browser (old Phase 5), memory (old Phase 4) and the skill import (old Phase 6) move into Phase 4.
+- **Subscriptions.** OpenAI now lets open-source apps that run on your own computer use a ChatGPT plan through "Sign in with ChatGPT" (a preview, checked 20 Nov 2026). Covo will use that route and never reads the Codex program's sign-in. This updates ADR-009; the terms are recorded in [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).

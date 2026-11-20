@@ -1,6 +1,6 @@
 # Phase 3 Plan: The App and Your Phone
 
-> Status: **in progress** (M0–M6 done), 20 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI) and ADR-012 (phase order). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
+> Status: **in progress** (M0–M6 done), 20 Nov 2026. Planned 18 Nov 2026. Follows [BLUEPRINT.md](BLUEPRINT.md) §5 "Revised roadmap" and ADR-006 (chat-first UI), ADR-012 (phase order) and ADR-013 (what comes next: [PHASE4.md](PHASE4.md)). Phase 2 is done ([PHASE2.md](PHASE2.md)). Anything here can change later. The decisions in §7 need your OK before M0 starts.
 
 ## 1. Goal
 
@@ -142,7 +142,7 @@ Covo stays local. Nothing listens beyond your own Mac, and every request to the 
   - Routines never use command-line subscriptions (Claude Code) unless you turn that on. Otherwise the bot's next model, or the free local one, does the work.
 - **Daily summary:** at the time you pick (18:00 to start with), in your main bot's chat. It covers what ran since the last one, what changed (with Undo), what was spent against the daily limit and what's waiting. It goes to your phone too, short and never with file contents, unless the phone is set to only what needs you. A quiet routine's "finished" message isn't sent to the phone.
 - **Verified** with 22 new tests (schedules, routines, the service running them on time, missed runs, pauses and quiet hours, subscriptions, the summary, the API, the commands and the phone). Also live on a throwaway service: a routine made in the app for 2 minutes later ran by itself, and the summary listed it.) | 3–4 days |
-| **M7** | **Demo, docs and safety check.** The acceptance demo below and README updates. Attack tests:<br>• a web page tries to call the service (cross-site request, DNS rebinding)<br>• requests with a missing or wrong token<br>• a Telegram message from a stranger<br>• a replayed or edited approval<br>• a run that tries to read the service token.<br>All are refused and logged. | The acceptance demo passes end to end | 2–3 days |
+| **M7** | **Safety check and wrap-up.** The acceptance demo below and README updates. The public demo video moves to Phase 4 M8, when bots can read email and browse. Attack tests:<br>• a web page tries to call the service (cross-site request, DNS rebinding)<br>• requests with a missing or wrong token<br>• a Telegram message from a stranger<br>• a replayed or edited approval<br>• a run that tries to read the service token.<br>All are refused and logged. | The acceptance demo passes end to end | 2–3 days |
 
 Total: about **4–5 weeks** part-time.
 
@@ -156,8 +156,8 @@ covo app                              # Covo.app opens, signed in, in your syste
 covo phone connect                    # create a Telegram bot, pair your phone
 covo bots set "Docs helper" --task-limit 0.001
 # Chat: "summarise every file in docs/" → pause → card in the app AND on the phone → Approve on the phone
-covo routines add "Daily notes" --bot "Docs helper" --every "in 2 minutes" "summarise NOTES.md"
-# Two minutes later it runs by itself; the daily summary lists both runs
+covo routines add "Daily notes" --bot "Docs helper" --every "every day at 09:32" "summarise NOTES.md"   # two minutes from now
+# Two minutes later it runs by itself; `covo summary now` lists both runs
 curl http://127.0.0.1:7420/api/runs   # 401: no token
 covo audit verify                     # chain OK, phone approval recorded as decided_by phone
 ```
@@ -176,7 +176,7 @@ Pass criteria:
 - **Approvals are bound to the request.** Each approval card carries a hash of the exact request and an expiry time. An edited or replayed approval is refused (BLUEPRINT §3.5).
 - **The phone sees summaries, not files.** Telegram messages go through Telegram's servers. By default they contain the bot's name, a one-line summary, the amount and the buttons, never file contents or diffs. A setting can reduce this to "something needs you" only.
 - **Chat is tasks with memory of the chat.** Each message starts a run, and the last few messages go along as context. Lasting memory (rules a bot learns) is Phase 4.
-- **"Always allow" rules** (deferred in Phase 2 M4) stay in Phase 4. They come with signed rules and Touch ID, and Phase 3 adds no new irreversible actions.
+- **"Always allow" rules** (deferred in Phase 2 M4) are in Phase 5 now (ADR-013). They come with signed rules and Touch ID, and Phase 3 adds no new irreversible actions.
 - **Figma to code.** Screens are built from the "Covo App Design" Figma file through the Figma tools, using its variables as CSS variables (`var(--color-bg-app)` and so on). The `Screens` page (dark) and the `Screens · Light` page are the reference for each screen.
 
 ## 6. Risks

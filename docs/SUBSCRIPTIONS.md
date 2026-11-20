@@ -9,7 +9,7 @@ Checked on **18 November 2026**. Terms change, so check again before each releas
 | Subscription | Official tool | What the terms say | Covo |
 |---|---|---|---|
 | Claude Pro, Max or Ultra | Claude Code (`claude`) | Allowed, with conditions: you sign in to the **unmodified** Claude Code program yourself, through Anthropic's own sign-in. Other apps may not take, store or pass along your sign-in. | **Built (opt-in):** Covo runs your installed `claude` program in its sandbox. Covo never sees your sign-in. |
-| ChatGPT Plus or Pro | Codex CLI (`codex`) | Not settled. OpenAI recommends API keys for "programmatic Codex CLI workflows" and says to treat the sign-in file like a password. Nothing found says a ChatGPT sign-in may be driven by another app. | **Not built.** Use an OpenAI API key (`covo models add openai`). Revisit if OpenAI says more. |
+| ChatGPT Plus or Pro | Sign in with ChatGPT (OpenAI's sign-in for apps); Codex CLI (`codex`) | **Allowed for open-source apps on your own computer** (a preview, checked 20 Nov 2026): you approve on OpenAI's page, and use counts against your plan. Paid or hosted apps need OpenAI's approval. Driving the Codex program on its own sign-in is still not covered. | **Planned (Phase 4 M1):** "Continue with ChatGPT" in the app. Covo never reads Codex's sign-in file. Until then, use an OpenAI API key (`covo models add openai`). |
 | Google AI Pro or Ultra | Gemini CLI (`gemini`), now Antigravity CLI (`agy`) | Gemini CLI's "Login with Google" stopped working for these plans on 18 June 2026. Antigravity's terms forbid accessing the service through third-party software, and Google has suspended accounts for it. | **Not built.** Use a Gemini API key (free tier available: `covo models add gemini`). |
 
 ## Claude (Anthropic)
@@ -67,6 +67,21 @@ Checked on **18 November 2026**. Terms change, so check again before each releas
 **Decision:** not built. OpenAI points automation to API keys, and we couldn't read the governing terms ourselves. Covo already supports OpenAI API keys. We'll revisit if OpenAI publishes clear guidance; a person should read the Terms of Use in a browser before then.
 
 **Re-check:** [Codex authentication](https://learn.chatgpt.com/docs/auth), the [ChatGPT Terms of Use](https://openai.com/policies/row-terms-of-use/), and the [Codex plan help page](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan).
+
+**Update, 20 Nov 2026: Sign in with ChatGPT**
+
+Sources, read 20 Nov 2026:
+- OpenAI's developer docs: [plan usage for open-source and local apps](https://developers.openai.com/siwc/token-sharing-open-source), [the sign-in flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in), [preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations) and [client IDs for commercial partners](https://developers.openai.com/siwc/request-client-id).
+- The help page [Using your ChatGPT plan in other apps and sites](https://help.openai.com/en/articles/11369540-using-your-chatgpt-plan-in-other-apps-and-sites) refused automated reading (HTTP 403). A person should read it in a browser.
+
+What we found:
+- "Sign in with ChatGPT" lets an app use the user's ChatGPT plan after the user agrees on OpenAI's own page. The docs cover "open-source and locally hosted apps" directly.
+- For those apps the sign-in needs no client secret and no partner key, and the docs describe no application step. Paid or hosted apps go through an interest form for commercial partners.
+- It's a preview. Requests go to OpenAI's Responses API, some request settings aren't supported, and the button must say "Continue with ChatGPT".
+- The docs say nothing about scheduled, unattended use of a plan.
+- Driving the Codex program on its own ChatGPT sign-in still isn't covered.
+
+**Decision:** build it in Phase 4 M1 as an opt-in connection. Covo signs in through OpenAI's page, keeps its own sign-in in the Keychain, and never reads `~/.codex/auth.json`. Routines don't use it unless you allow subscriptions for routines (`covo routines subscriptions on`).
 
 ## Gemini (Google)
 
