@@ -59,6 +59,8 @@ export interface ChatGPTOptions {
   /** Tests point these at stand-in servers. */
   authBase?: string;
   apiBase?: string;
+  /** Where to say what happened, in plain words (never a code or token): the service's log. */
+  log?: (line: string) => void;
 }
 
 /** What Covo keeps about the ChatGPT sign-in, besides the tokens. Nothing secret. */
@@ -159,7 +161,9 @@ export async function verifyIdToken(
   );
   if (!ok) throw new ChatGPTError("OpenAI's signature on the ID token doesn't match.");
   const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (claims.iss !== want.issuer) throw new ChatGPTError("The ID token wasn't issued by OpenAI's sign-in service.");
+  const bare = (u: string | undefined) => (u ?? "").replace(/\/+$/, "");
+  if (bare(claims.iss) !== bare(want.issuer))
+    throw new ChatGPTError("The ID token wasn't issued by OpenAI's sign-in service.");
   if (!aud.includes(want.audience)) throw new ChatGPTError("The ID token was made for another app.");
   if (!claims.exp || claims.exp * 1000 < want.now) throw new ChatGPTError("The ID token has expired.");
   if (claims.nonce !== want.nonce) throw new ChatGPTError("The ID token is from another sign-in attempt.");
@@ -213,17 +217,18 @@ export interface SignIn {
 /**
  * Starts signing in: a one-time page on 127.0.0.1 waits for OpenAI to send you back. Open `url` in
  * your browser; `done` settles when it's over (or after 10 minutes).
+ *
+ * If OpenAI refuses the code with invalid_grant, its docs say to discard that code and start a fresh
+ * authorization with the issued client ID. Covo does that once by itself: the page you land on sends
+ * your browser straight into the new attempt.
  */
 export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }): Promise<SignIn> {
   const now = o.now ?? Date.now;
+  const log = o.log ?? (() => {});
   const before = readAccount(o.home);
   // This Mac's id for OpenAI: made once, kept, and never a credential.
   const account: ChatGPTAccount = before ?? { hostId: `urn:uuid:${randomUUID()}` };
   if (!before) writeAccount(o.home, account);
-  const verifier = random(48);
-  const challenge = b64url(createHash("sha256").update(verifier).digest());
-  const state = random(24);
-  const nonce = random(24);
   const discovery = await discover(o);
 
   let settle: { ok: (v: { email: string | null; firstTime: boolean }) => void; fail: (e: Error) => void };
@@ -240,19 +245,58 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
     finished = true;
     clearTimeout(timer);
     setTimeout(() => server?.stop(true), 250); // let the browser get its page first
-    if (err) settle.fail(err);
-    else settle.ok(value as { email: string | null; firstTime: boolean });
+    if (err) {
+      log(`sign-in ended: ${err.message}`);
+      settle.fail(err);
+    } else {
+      log("signed in");
+      settle.ok(value as { email: string | null; firstTime: boolean });
+    }
   };
 
   let redirect = "";
-  const handle = async (req: Request): Promise<Response> => {
-    const url = new URL(req.url);
-    if (url.pathname !== "/auth/callback") return new Response("Not found", { status: 404 });
-    const html = (title: string, text: string, status = 200) =>
-      new Response(PAGE(title, text), { status, headers: { "content-type": "text/html; charset=utf-8" } });
-    // The state comes first: anything else may be someone else's request.
-    if (url.searchParams.get("state") !== state)
-      return html("Covo", "This sign-in link isn't Covo's current one.", 400);
+  /** One authorization attempt: its own state, nonce and PKCE verifier. */
+  interface Attempt {
+    n: number;
+    state: string;
+    nonce: string;
+    verifier: string;
+    /** The client id sent to OpenAI's authorize page. */
+    client: string;
+    /** The first callback for this attempt; a second one gets the same answer (no second exchange). */
+    result?: Promise<{ title: string; text: string; status: number; location?: string }>;
+  }
+  let attempt: Attempt;
+  const authorizeUrl = (a: Attempt) => {
+    const q = new URLSearchParams({
+      client_id: a.client,
+      ...(a.client === "dynamic_agent_client" ? { agent_name_hint: CHATGPT.appName } : {}),
+      ext_agent_host_id: account.hostId,
+      ...(a.client !== "dynamic_agent_client" && account.email ? { login_hint: account.email } : {}),
+      response_type: "code",
+      redirect_uri: redirect,
+      scope: CHATGPT.scopes,
+      resource: CHATGPT.api,
+      state: a.state,
+      nonce: a.nonce,
+      code_challenge_method: "S256",
+      code_challenge: b64url(createHash("sha256").update(a.verifier).digest()),
+    });
+    return `${o.authBase ?? CHATGPT.auth}/api/accounts/authorize?${q.toString()}`;
+  };
+  const newAttempt = (n: number): Attempt => ({
+    n,
+    state: random(24),
+    nonce: random(24),
+    verifier: random(48),
+    client: account.clientId ?? "dynamic_agent_client",
+  });
+
+  const callback = async (
+    a: Attempt,
+    url: URL,
+  ): Promise<{ title: string; text: string; status: number; location?: string }> => {
+    log(`callback ${a.n}: OpenAI sent back ${[...url.searchParams.keys()].join(", ") || "nothing"}`);
     if (url.searchParams.get("error")) {
       const declined = url.searchParams.get("error") === "access_denied";
       finish(
@@ -260,39 +304,70 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
           declined ? "You didn't allow Covo to use your ChatGPT plan." : "OpenAI's sign-in didn't finish.",
         ),
       );
-      return html(
-        "Not connected",
-        declined
-          ? "You didn't allow it, so nothing changed. You can close this tab."
-          : "The sign-in didn't finish. You can close this tab and try again in Covo.",
-      );
+      return declined
+        ? {
+            title: "Not connected",
+            text: "You didn't allow it, so nothing changed. You can close this tab.",
+            status: 200,
+          }
+        : {
+            title: "Not connected",
+            text: "The sign-in didn't finish. You can close this tab and try again in Covo.",
+            status: 200,
+          };
     }
     const code = url.searchParams.get("code");
     const issued = url.searchParams.get("client_id");
     const clientId = issued ?? account.clientId;
     if (!code || !clientId) {
       finish(new ChatGPTError("OpenAI didn't finish registering Covo. Try again."));
-      return html(
-        "Not connected",
-        "OpenAI didn't finish the sign-in. You can close this tab and try again in Covo.",
-        400,
-      );
+      return {
+        title: "Not connected",
+        text: "OpenAI didn't finish the sign-in. You can close this tab and try again in Covo.",
+        status: 400,
+      };
     }
     // When signing in again, OpenAI must send back the same id it gave before.
     if (account.clientId && issued && issued !== account.clientId) {
       finish(new ChatGPTError("OpenAI sent back a different app id than before. Nothing was saved."));
-      return html("Not connected", "Something didn't match, so nothing was saved. You can close this tab.", 400);
+      return {
+        title: "Not connected",
+        text: "Something didn't match, so nothing was saved. You can close this tab.",
+        status: 400,
+      };
+    }
+    // OpenAI's docs: keep the issued client ID, even if this attempt goes no further.
+    if (!account.clientId) {
+      account.clientId = clientId;
+      writeAccount(o.home, account);
     }
     try {
       const t = await tokenRequest(o, {
         grant_type: "authorization_code",
         client_id: clientId,
         code,
-        code_verifier: verifier,
+        code_verifier: a.verifier,
         redirect_uri: redirect,
         resource: CHATGPT.api,
       });
-      if (t.status !== 200) throw new ChatGPTError(`OpenAI refused the sign-in code (${t.body.error ?? t.status}).`);
+      if (t.status !== 200) {
+        log(
+          `exchange ${a.n}: OpenAI answered ${t.status} ${t.body.error ?? ""}${t.body.error_description ? `: ${t.body.error_description}` : ""} (client ${clientId.slice(0, 7)}…, redirect ${redirect}, verifier ${a.verifier.length} characters)`,
+        );
+        // Discard the code and start a fresh authorization with the issued client ID, once.
+        if (t.body.error === "invalid_grant" && a.n === 1) {
+          attempt = newAttempt(2);
+          log("starting a fresh authorization with the issued client ID, as OpenAI's docs say");
+          return {
+            title: "One more step",
+            text: "Covo is asking OpenAI again…",
+            status: 302,
+            location: authorizeUrl(attempt),
+          };
+        }
+        const why = t.body.error_description ? `: ${t.body.error_description}` : "";
+        throw new ChatGPTError(`OpenAI refused the sign-in code (${t.body.error ?? t.status}${why}).`);
+      }
       const scopes = (t.body.scope ?? url.searchParams.get("scope") ?? "").split(/[\s+]+/).filter(Boolean);
       // A valid sign-in alone isn't permission to use the plan.
       if (!scopes.includes(CHATGPT.planScope))
@@ -302,7 +377,7 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
         issuer: discovery.issuer,
         jwksUri: discovery.jwks_uri,
         audience: clientId,
-        nonce,
+        nonce: a.nonce,
         now: now(),
         ...(o.fetch ? { fetch: o.fetch } : {}),
       });
@@ -322,18 +397,42 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
         signedInAt: now(),
       });
       finish(null, { email: who.email ?? null, firstTime });
-      return html(
-        "You're signed in",
-        "Covo can now use your ChatGPT plan. You can close this tab and go back to Covo.",
-      );
+      return {
+        title: "You're signed in",
+        text: "Covo can now use your ChatGPT plan. You can close this tab and go back to Covo.",
+        status: 200,
+      };
     } catch (e) {
       finish(e instanceof ChatGPTError ? e : new ChatGPTError(`The sign-in didn't finish: ${(e as Error).message}`));
-      return html(
-        "Not connected",
-        "The sign-in didn't finish, and nothing was saved. You can close this tab and try again in Covo.",
-        400,
-      );
+      return {
+        title: "Not connected",
+        text: "The sign-in didn't finish, and nothing was saved. You can close this tab and try again in Covo.",
+        status: 400,
+      };
     }
+  };
+
+  const handle = async (req: Request): Promise<Response> => {
+    const url = new URL(req.url);
+    if (url.pathname !== "/auth/callback") return new Response("Not found", { status: 404 });
+    const a = attempt;
+    // The state comes first: anything else may be someone else's request.
+    if (url.searchParams.get("state") !== a.state) {
+      log("callback: a request with a state Covo didn't send was turned away");
+      return new Response(PAGE("Covo", "This sign-in link isn't Covo's current one."), {
+        status: 400,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+    if (a.result) log(`callback ${a.n}: the browser came back again; answering with the first result`);
+    a.result ??= callback(a, url);
+    const r = await a.result;
+    if (r.location)
+      return new Response(null, { status: 302, headers: { location: r.location, "cache-control": "no-store" } });
+    return new Response(PAGE(r.title, r.text), {
+      status: r.status,
+      headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+    });
   };
 
   // OpenAI's own example port first; any free port works, as long as it's 127.0.0.1.
@@ -349,23 +448,12 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
     () => finish(new ChatGPTError("The sign-in took longer than 10 minutes. Try again.")),
     SIGN_IN_TIMEOUT_MS,
   );
-
-  const q = new URLSearchParams({
-    client_id: account.clientId ?? "dynamic_agent_client",
-    ...(account.clientId ? {} : { agent_name_hint: CHATGPT.appName }),
-    ext_agent_host_id: account.hostId,
-    ...(account.clientId && account.email ? { login_hint: account.email } : {}),
-    response_type: "code",
-    redirect_uri: redirect,
-    scope: CHATGPT.scopes,
-    resource: CHATGPT.api,
-    state,
-    nonce,
-    code_challenge_method: "S256",
-    code_challenge: challenge,
-  });
+  attempt = newAttempt(1);
+  log(
+    `sign-in started: ${attempt.client === "dynamic_agent_client" ? "first registration" : "signing in again"}, callback ${redirect}`,
+  );
   return {
-    url: `${o.authBase ?? CHATGPT.auth}/api/accounts/authorize?${q.toString()}`,
+    url: authorizeUrl(attempt),
     done,
     cancel: () => finish(new ChatGPTError("Sign-in cancelled.")),
   };

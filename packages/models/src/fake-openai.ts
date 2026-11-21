@@ -12,7 +12,7 @@ export function fakeClock(now: () => number): void {
 }
 
 /** A stand-in for auth.openai.com and api.openai.com/v1. */
-export async function fakeOpenAI(o: { scope?: string; signWith?: "own" | "other" } = {}) {
+export async function fakeOpenAI(o: { scope?: string; signWith?: "own" | "other"; refuseFirstCodes?: number } = {}) {
   const gen = () =>
     webcrypto.subtle.generateKey(
       { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
@@ -31,6 +31,7 @@ export async function fakeOpenAI(o: { scope?: string; signWith?: "own" | "other"
     refresh: new Set<string>(),
     access: 0,
     codes: 0,
+    refused: 0,
   };
   const sign = async (claims: Record<string, unknown>) => {
     const enc = (x: unknown) => Buffer.from(JSON.stringify(x)).toString("base64url");
@@ -77,6 +78,12 @@ export async function fakeOpenAI(o: { scope?: string; signWith?: "own" | "other"
         const f = new URLSearchParams(await req.text());
         s.token.push(f);
         if (f.get("grant_type") === "authorization_code") {
+          // Like OpenAI sometimes does on a first registration: refuse the code; a fresh attempt works.
+          if ((o.refuseFirstCodes ?? 0) > s.refused) {
+            s.refused++;
+            s.pending.delete(f.get("code") ?? "");
+            return Response.json({ error: "invalid_grant", error_description: "test refusal" }, { status: 400 });
+          }
           const p = s.pending.get(f.get("code") ?? "");
           const verifier = createHash("sha256")
             .update(f.get("code_verifier") ?? "")

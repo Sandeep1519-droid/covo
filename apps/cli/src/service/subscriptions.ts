@@ -105,7 +105,8 @@ export class Subscriptions {
   async startChatGPT(by: string): Promise<{ url: string }> {
     if (this.signIn) return { url: this.signIn.url };
     this.lastError = null;
-    const o = chatgptOptions(this.ctx);
+    // What happens is written to Covo's log in plain words (never a code or a token).
+    const o = { ...chatgptOptions(this.ctx), log: (line: string) => this.ctx.print(`chatgpt: ${line}\n`) };
     const s = await beginChatGPTSignIn(o);
     this.signIn = { url: s.url, cancel: s.cancel };
     void s.done

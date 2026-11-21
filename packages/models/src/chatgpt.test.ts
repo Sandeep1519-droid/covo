@@ -86,6 +86,42 @@ describe("Sign in with ChatGPT", () => {
     expect((await again.done).firstTime).toBe(true); // the welcome note wasn't marked as seen
   });
 
+  test("refused code: Covo keeps the issued id and asks again by itself, once; a second callback isn't traded twice", async () => {
+    fake = await fakeOpenAI({ refuseFirstCodes: 1 });
+    const lines: string[] = [];
+    const s = await beginChatGPTSignIn({ ...opts(), log: (l) => lines.push(l) });
+    // The browser lands on the first callback, which sends it into a fresh authorization.
+    expect(await browse(s.url)).toContain("You're signed in");
+    expect(await s.done).toMatchObject({ email: "me@example.com" });
+    const asked = fake.s.authorize.map((q) => [q.get("client_id"), q.get("agent_name_hint")]);
+    expect(asked).toEqual([
+      ["dynamic_agent_client", "Covo"],
+      ["oaiapp_test", null],
+    ]);
+    expect(lines.join("\n")).toContain("invalid_grant: test refusal");
+    expect(lines.join("\n")).toContain("starting a fresh authorization with the issued client ID");
+    expect(lines.join("\n")).not.toContain("code=");
+    expect(readAccount(home)?.clientId).toBe("oaiapp_test");
+
+    // Refused twice: it stops and says why, keeping the issued id for next time.
+    fake.stop();
+    fake = await fakeOpenAI({ refuseFirstCodes: 5 });
+    rmSync(join(home, "state/chatgpt.json"));
+    const again = await beginChatGPTSignIn(opts());
+    await browse(again.url);
+    await expect(again.done).rejects.toThrow("OpenAI refused the sign-in code (invalid_grant: test refusal)");
+    expect(readAccount(home)?.clientId).toBe("oaiapp_test");
+
+    // The browser delivers the callback twice: the code is traded once, both get the same answer.
+    fake.stop();
+    fake = await fakeOpenAI();
+    const twice = await beginChatGPTSignIn(opts());
+    const back = (await fetch(twice.url, { redirect: "manual" })).headers.get("location") as string;
+    const pages = await Promise.all([fetch(back).then((r) => r.text()), fetch(back).then((r) => r.text())]);
+    expect(pages.every((p) => p.includes("You're signed in"))).toBe(true);
+    expect(fake.s.token.filter((f) => f.get("grant_type") === "authorization_code")).toHaveLength(1);
+  });
+
   test("renewed one at a time when it runs out; the refresh token rotates; an ended sign-in says so", async () => {
     fake = await fakeOpenAI();
     const s = await beginChatGPTSignIn(opts());
