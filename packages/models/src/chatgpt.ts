@@ -13,7 +13,8 @@ import {
 import { join } from "node:path";
 import type { SecretStore } from "@covo/platform";
 
-// "Sign in with ChatGPT" (Phase 4 M1): your ChatGPT Plus or Pro plan pays for Covo's model calls.
+// "Sign in with ChatGPT" (Phase 4 M1): your ChatGPT Go, Plus, Pro or Business plan pays for Covo's
+// model calls. (Any plan, Free included, works through Codex instead: engines.ts.)
 // OpenAI allows this for open-source apps that run on your own computer (developers.openai.com/siwc,
 // a preview, checked 20 Nov 2026; docs/SUBSCRIPTIONS.md). How it works:
 //   1. Covo opens OpenAI's own sign-in page in your browser (OAuth with PKCE: no client secret).
@@ -36,7 +37,7 @@ export const CHATGPT = {
 
 /** What to say when OpenAI won't let Covo use the plan (seen live: a plan that ended). */
 export const PLAN_NEEDED =
-  "OpenAI didn't let Covo use your ChatGPT plan. Using it in other apps needs an active ChatGPT Plus or Pro plan; OpenAI's page says \"A required permission is unavailable\" when the plan doesn't include it. Nothing was saved.";
+  "OpenAI didn't let Covo use your ChatGPT plan. Using it in other apps this way needs an active ChatGPT Go, Plus, Pro or Business plan; OpenAI's page says \"A required permission is unavailable\" when the plan doesn't include it. Any plan, Free included, works through Codex: Settings → AI models → Get Codex. Nothing was saved.";
 
 const ACCESS_ID = "chatgpt-access";
 const REFRESH_ID = "chatgpt-refresh";
@@ -354,7 +355,7 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
         finish(new ChatGPTError(PLAN_NEEDED));
         return {
           title: "Not connected",
-          text: "OpenAI didn't let Covo use your ChatGPT plan. This needs an active ChatGPT Plus or Pro plan. You can close this tab.",
+          text: "OpenAI didn't let Covo use your ChatGPT plan this way: it needs an active ChatGPT Go, Plus, Pro or Business plan. Any plan works through Codex in Covo. You can close this tab.",
           status: 200,
         };
       }
@@ -385,7 +386,7 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
         }
         const why = t.body.error_description ? `: ${t.body.error_description}` : "";
         throw new ChatGPTError(
-          `OpenAI refused the sign-in code (${t.body.error ?? t.status}${why}). The usual reason: your ChatGPT account doesn't have an active Plus or Pro plan, which using it in other apps needs.`,
+          `OpenAI refused the sign-in code (${t.body.error ?? t.status}${why}). The usual reason: your ChatGPT account doesn't have an active Go, Plus, Pro or Business plan, which using it in other apps this way needs. Any plan works through Codex.`,
         );
       }
       const scopes = (t.body.scope ?? url.searchParams.get("scope") ?? "").split(/[\s+]+/).filter(Boolean);

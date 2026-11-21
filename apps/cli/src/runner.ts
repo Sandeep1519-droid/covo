@@ -196,7 +196,10 @@ export function eventPrinter(
       if (!o.interactive)
         print(`    Approve with: covo approve ${e.runId.slice(-6)}    Stop it with: covo deny ${e.runId.slice(-6)}\n`);
     } else if (e.type === "engine") {
-      if (e.phase === "start") print(`  ${e.label} is working in Covo's sandbox (file tools only)…\n`);
+      if (e.phase === "start")
+        print(
+          `  ${e.label} is working in Covo's sandbox (${e.label === "Codex" ? "its network reaches only OpenAI" : "file tools only"})…\n`,
+        );
       else if (e.ok)
         print(
           `  ${e.label} finished: ${e.turns} turn${e.turns === 1 ? "" : "s"}, ${(e.tokensIn + e.tokensOut).toLocaleString("en-US")} tokens, ${e.secs.toFixed(0)} s (on your subscription)\n`,

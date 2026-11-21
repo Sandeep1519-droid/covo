@@ -348,6 +348,7 @@ async function execute(db: Database, runsDir: string, o: StartRunOptions, now: (
             secs,
             apiEquivalentUsd: r.apiEquivalentUsd,
             denied: r.denied,
+            ...(r.blockedHosts?.length ? { blockedHosts: r.blockedHosts } : {}),
             ...(r.error ? { error: r.error } : {}),
           },
         },

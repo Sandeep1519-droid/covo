@@ -25,6 +25,14 @@ describe("buildProfile", () => {
     expect(p).toContain("(deny network*)");
     expect(p).toContain('(subpath "/a \\"quoted\\" \\\\path")');
   });
+
+  test("with a filter port, allows only that local port", () => {
+    const p = buildProfile({ workspace: "/w", tmp: "/t", proxyPort: 4567 });
+    expect(p).toContain("(deny network*)");
+    expect(p).toContain('(allow network-outbound (remote ip "localhost:4567"))');
+    expect(p).not.toContain("dnssd");
+    expect(() => buildProfile({ workspace: "/w", tmp: "/t", proxyPort: 70000 })).toThrow();
+  });
 });
 
 describe("macSandbox.exec", () => {
@@ -74,5 +82,35 @@ describe("macSandbox.exec", () => {
   test("has no network", async () => {
     const r = await macSandbox.exec(["/usr/bin/curl", "-sS", "-m", "5", "https://example.com"], opts());
     expect(r.code).not.toBe(0);
+  });
+
+  test("with a filter port, reaches that port on this Mac and nothing else", async () => {
+    const listen = () =>
+      Bun.listen({
+        hostname: "127.0.0.1",
+        port: 0,
+        socket: {
+          data() {},
+          open(s) {
+            s.end();
+          },
+        },
+      });
+    const allowed = listen();
+    const other = listen();
+    try {
+      const nc = (port: number) =>
+        macSandbox.exec(["/usr/bin/nc", "-z", "-G", "2", "127.0.0.1", String(port)], opts({ proxyPort: allowed.port }));
+      expect((await nc(allowed.port)).code).toBe(0);
+      expect((await nc(other.port)).code).not.toBe(0);
+      const direct = await macSandbox.exec(
+        ["/usr/bin/curl", "-sS", "-m", "5", "https://example.com"],
+        opts({ proxyPort: allowed.port }),
+      );
+      expect(direct.code).not.toBe(0);
+    } finally {
+      allowed.stop(true);
+      other.stop(true);
+    }
   });
 });

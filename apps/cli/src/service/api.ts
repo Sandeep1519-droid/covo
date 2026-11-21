@@ -736,7 +736,7 @@ export async function handleApi(
       }
     }
 
-    // Your own AI plans (Phase 4 M1): ChatGPT through Sign in with ChatGPT, Claude through Claude Code.
+    // Your own AI plans (Phase 4 M1): Sign in with ChatGPT, and the programs that use your plan.
     if (a === "subscriptions") {
       const subs = service.subscriptions;
       if (!subs) throw new HttpError(503, "Covo's service isn't ready yet.");
@@ -751,10 +751,14 @@ export async function handleApi(
         service.announce({ type: "changed", what: "models" });
         return json(await subs.status());
       }
-      if (id === "claude-code") {
-        if (m === "POST" && action === "check") await subs.checkClaude();
-        else if (m === "POST" && !action) await subs.connectClaude(await body(req), who);
-        else if (m === "DELETE" && !action) await subs.disconnectClaude(who);
+      // Programs that use your plan (Claude Code, Codex): Get, Sign in, Check, Connect.
+      if (id && engineById(id)) {
+        if (m === "POST" && action === "install") subs.install(id, who);
+        else if (m === "POST" && action === "sign-in") subs.startSignIn(id, who);
+        else if (m === "POST" && action === "cancel") subs.cancel(id);
+        else if (m === "POST" && action === "check") await subs.check(id);
+        else if (m === "POST" && !action) await subs.connect(id, await body(req), who);
+        else if (m === "DELETE" && !action) await subs.disconnect(id, who);
         else throw new HttpError(404, "Not found.");
         service.announce({ type: "changed", what: "models" });
         return json(await subs.status());

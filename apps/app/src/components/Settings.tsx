@@ -134,9 +134,13 @@ function General({
   );
 }
 
+/** Models whose sign-in is Covo's own, so removing them signs out too. */
+const signsOut = (m: ApiModel) => m.subscription === "chatgpt" || m.subscription === "codex";
+
 function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }) {
   const [providers, setProviders] = useState<ApiProvider[]>([]);
-  const [adding, setAdding] = useState(false);
+  /** The service whose key you're adding, or false. */
+  const [adding, setAdding] = useState<string | false>(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api<ApiProvider[]>("/providers")
@@ -156,7 +160,7 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
   return (
     <>
       <span className="t-overline muted">Your subscriptions</span>
-      <SubscriptionRows refresh={refresh} />
+      <SubscriptionRows refresh={refresh} onAddKey={(p) => setAdding(p)} />
       <span className="t-overline muted">Your models</span>
       <div className="rows">
         {models.map((m) => (
@@ -170,7 +174,7 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
                 {m.subscription === "chatgpt"
                   ? `Uses your ChatGPT plan · ${m.model}`
                   : m.engine
-                    ? "Uses your subscription"
+                    ? `Uses your ${m.subscription === "codex" ? "ChatGPT" : "Claude"} plan, through ${m.providerLabel}`
                     : m.model}
                 {m.hasKey ? " · key in the Keychain" : ""}
               </span>
@@ -185,14 +189,15 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
             <Button
               small
               onClick={() =>
-                // Your ChatGPT plan: removing it also signs Covo out at OpenAI.
+                // Covo's own ChatGPT sign-ins (Sign in with ChatGPT, Codex): removing one also signs
+                // Covo out at OpenAI.
                 act(
-                  m.subscription === "chatgpt" ? "/subscriptions/chatgpt" : `/models/${encodeURIComponent(m.name)}`,
+                  signsOut(m) ? `/subscriptions/${m.subscription}` : `/models/${encodeURIComponent(m.name)}`,
                   "DELETE",
                 )
               }
             >
-              {m.subscription === "chatgpt" ? "Sign out" : "Remove"}
+              {signsOut(m) ? "Sign out" : "Remove"}
             </Button>
           </div>
         ))}
@@ -214,7 +219,7 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
             </span>
           </span>
           {!adding && (
-            <Button kind="secondary" small onClick={() => setAdding(true)}>
+            <Button kind="secondary" small onClick={() => setAdding("anthropic")}>
               Add key
             </Button>
           )}
@@ -223,6 +228,8 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
       {error && <p className="t-body-s danger">{error}</p>}
       {adding && (
         <AddModel
+          key={adding}
+          initial={adding}
           providers={providers}
           onDone={() => {
             setAdding(false);
@@ -236,15 +243,20 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
 }
 
 function AddModel({
+  initial,
   providers,
   onDone,
   onCancel,
 }: {
+  initial: string;
   providers: ApiProvider[];
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const [provider, setProvider] = useState("anthropic");
+  const [provider, setProvider] = useState(initial);
+  const form = useRef<HTMLFormElement>(null);
+  // Opened from further up the page (Google's row): bring the form into view.
+  useEffect(() => form.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), []);
   const p = providers.find((x) => x.id === provider);
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
@@ -269,6 +281,7 @@ function AddModel({
   };
   return (
     <form
+      ref={form}
       className="add-model"
       onSubmit={(e) => {
         e.preventDefault();

@@ -4,6 +4,16 @@ export type { AskApproval, SpendLimits, SpendRequest } from "./budget.ts";
 export { Budget, decide, type RefusedAnswer, refuseAnswer, startOfLocalDay, usd } from "./budget.ts";
 export type { ChatMessage, NewMessage } from "./chat.ts";
 export { addBotMessage, addMessage, CONTEXT_TURNS, failMessage, linkRun, listMessages } from "./chat.ts";
+export {
+  CodexEngine,
+  codexArgs,
+  codexErrorKind,
+  codexFolders,
+  codexOutcome,
+  parseCodexEvents,
+} from "./codex.ts";
+export type { EgressFilter } from "./egress.ts";
+export { openAiOnly, proxyEnv, startEgressFilter } from "./egress.ts";
 export type { Engine, EngineResult, EngineTask } from "./engines.ts";
 export {
   CLAUDE_CODE_TOOLS,

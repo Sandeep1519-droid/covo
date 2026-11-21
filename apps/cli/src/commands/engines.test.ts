@@ -111,3 +111,26 @@ test("at the plan's cap, the bot's next model takes over", async () => {
   expect(printed).toContain("(claude-sub failed: quota. Switching to local.)");
   expect(readFileSync(join(home, "workspaces/default/README.md"), "utf8")).toContain("## Setup");
 });
+
+test("Codex: missing says how to get it; signed out says sign in first; signed in with your ChatGPT account saves it", async () => {
+  const which = (path: string | null) => (cmd: string) => (cmd === "codex" ? path : null);
+  const missing = await main(["models", "add", "codex", "--yes"], env(), { ...base(), which: which(null) });
+  expect(missing.code).toBe(1);
+  expect(missing.out).toContain("Get it with: covo models install codex");
+
+  let st = { signedIn: false as boolean | null, method: null as string | null };
+  const ctx = () => ({ ...base(), which: which("/opt/bin/codex"), engineSignIn: async () => st });
+  const out = await main(["models", "add", "codex", "--yes"], env(), ctx());
+  expect(out).toEqual({ code: 1, out: "Sign in first: covo models sign-in codex. Nothing was saved.\n" });
+
+  st = { signedIn: true, method: "api_key" };
+  expect((await main(["models", "add", "codex", "--yes"], env(), ctx())).out).toContain("would bill that key");
+
+  st = { signedIn: true, method: "chatgpt" };
+  const ok = await main(["models", "add", "codex", "--yes"], env(), ctx());
+  expect(printed).toContain("its network reaches only OpenAI's servers");
+  expect(ok.out).toContain('Saved "codex": Codex');
+  const cfg = JSON.parse(readFileSync(join(home, "config.json"), "utf8"));
+  expect(cfg.connections[0]).toMatchObject({ name: "codex", provider: "codex", model: "default" });
+  expect(cfg.connections[0].keyId).toBeUndefined();
+});

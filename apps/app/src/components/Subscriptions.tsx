@@ -1,32 +1,37 @@
-// Your own AI plans in Settings → AI models (Phase 4 M1, Figma S2): ChatGPT Plus or Pro through
-// OpenAI's "Sign in with ChatGPT", and Claude Pro or Max through the Claude Code program on this Mac.
-// The wording follows OpenAI's rules for Sign in with ChatGPT: the button says "Continue with
-// ChatGPT", and "Manage usage" goes to ChatGPT's own usage page.
+// Your own AI plans in Settings → AI models (Phase 4 M1, Figma S2; docs/SUBSCRIPTIONS.md):
+// - programs that use your plan, Claude Code and Codex: Get (the maker's own installer), Sign in (the
+//   program's own sign-in, in your browser), Connect (after the notice);
+// - ChatGPT Go, Plus, Pro or Business through OpenAI's "Sign in with ChatGPT". Its wording follows
+//   OpenAI's rules: the button says "Continue with ChatGPT", and "Manage usage" goes to ChatGPT;
+// - Google's plans, which other apps may not use: a free Gemini key instead.
 
-import type { ApiRoutineSettings, ApiSubscriptions } from "@covo/api";
+import type { ApiEngine, ApiRoutineSettings, ApiSubscriptions } from "@covo/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.ts";
 import { inMacApp } from "../shell.ts";
 import { Icon } from "./Icon.tsx";
 import { Button, Pill, Toggle } from "./Pill.tsx";
 
-const CLAUDE_NOTICE = [
-  "You sign in with Claude Code itself. Covo never sees, copies or stores your sign-in.",
-  "Tasks count toward your plan's usage limits. When you hit one, the bot's next model takes over.",
-  "Claude Code works on Covo's copy of your files, with file tools only (no shell, no web).",
-  "Covo's spending limits don't apply: a subscription is a flat fee.",
-];
+/** "your Claude plan" / "your ChatGPT plan", and the account you sign in with. */
+const planOf = (e: ApiEngine) => (e.maker === "OpenAI" ? "ChatGPT" : "Claude");
+const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 
-export function SubscriptionRows({ refresh }: { refresh: () => void }) {
+export function SubscriptionRows({
+  refresh,
+  onAddKey,
+}: {
+  refresh: () => void;
+  onAddKey?: (provider: string) => void;
+}) {
   const [s, setS] = useState<ApiSubscriptions | null>(null);
   const [routines, setRoutines] = useState<ApiRoutineSettings | null>(null);
-  const [agreeing, setAgreeing] = useState(false);
+  /** The engine whose notice you're reading before Connect. */
+  const [agreeing, setAgreeing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   /** The sign-in link, when the browser blocked the new tab: you click it yourself. */
   const [link, setLink] = useState<string | null>(null);
-  const checked = useRef(false);
+  const checked = useRef(new Set<string>());
 
   const load = useCallback(async () => {
     try {
@@ -36,20 +41,23 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
     }
   }, []);
 
-  const call = async (path: string, method = "POST", body: Record<string, unknown> = {}) => {
-    setBusy(true);
-    setError(null);
-    try {
-      setS(await api<ApiSubscriptions>(path, { method, ...(method === "DELETE" ? {} : { body }) }));
-      return true;
-    } catch (e) {
-      setError((e as Error).message);
-      return false;
-    } finally {
-      setBusy(false);
-      refresh();
-    }
-  };
+  const call = useCallback(
+    async (path: string, method = "POST", body: Record<string, unknown> = {}) => {
+      setBusy(true);
+      setError(null);
+      try {
+        setS(await api<ApiSubscriptions>(path, { method, ...(method === "DELETE" ? {} : { body }) }));
+        return true;
+      } catch (e) {
+        setError((e as Error).message);
+        return false;
+      } finally {
+        setBusy(false);
+        refresh();
+      }
+    },
+    [refresh],
+  );
 
   useEffect(() => {
     void load();
@@ -58,20 +66,23 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
       .catch(() => {});
   }, [load]);
 
-  // While the sign-in waits for you in your browser, look again every two seconds.
+  // While something waits (an install, a sign-in in your browser), look again every two seconds.
+  const waiting = Boolean(s && (s.chatgpt.signingIn || s.engines.some((e) => e.installing || e.signingIn)));
   useEffect(() => {
-    if (!s?.chatgpt.signingIn) return;
+    if (!waiting) return;
     const t = setInterval(() => void load(), 2_000);
     return () => clearInterval(t);
-  }, [s?.chatgpt.signingIn, load]);
+  }, [waiting, load]);
 
-  // Once per visit: ask Claude Code whether you're signed in (it runs `claude auth status`).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when Claude Code is found
+  // Once per visit: ask each installed program whether you're signed in (`claude auth status`…).
   useEffect(() => {
-    if (!s?.claudeCode.path || s.claudeCode.connected || checked.current) return;
-    checked.current = true;
-    void call("/subscriptions/claude-code/check");
-  }, [s?.claudeCode.path]);
+    for (const e of s?.engines ?? []) {
+      if (!e.path || e.connected || e.signedIn !== null || e.installing || e.signingIn) continue;
+      if (checked.current.has(e.id)) continue;
+      checked.current.add(e.id);
+      void call(`/subscriptions/${e.id}/check`);
+    }
+  }, [s, call]);
 
   const continueWithChatGPT = async () => {
     setError(null);
@@ -94,16 +105,7 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
 
   if (!s) return error ? <p className="t-body-s danger">{error}</p> : null;
   const gpt = s.chatgpt;
-  const cc = s.claudeCode;
-
-  let ccLine: string;
-  if (cc.connected) ccLine = "Uses your Claude subscription, through Claude Code on this Mac";
-  else if (!cc.path) ccLine = "Claude Code isn't installed. Install it, then sign in with your Claude account:";
-  else if (cc.signedIn === null) ccLine = busy ? "Checking whether you're signed in…" : `Found at ${cc.path}`;
-  else if (!cc.signedIn) ccLine = `Found, but not signed in. In Terminal, run: ${cc.signIn}`;
-  else if (cc.method === "api_key")
-    ccLine = `Signed in with an API key, which would bill that key, not your plan. Sign in with your Claude account: ${cc.signIn}`;
-  else ccLine = "Signed in · ready to use your Claude Pro or Max plan";
+  const agreeTo = s.engines.find((e) => e.id === agreeing);
 
   return (
     <>
@@ -124,16 +126,29 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
         </div>
       )}
       <div className="rows">
+        {s.engines.map((e) => (
+          <EngineRow
+            key={e.id}
+            e={e}
+            busy={busy}
+            agreeing={agreeing === e.id}
+            onAgree={() => setAgreeing(e.id)}
+            call={call}
+          />
+        ))}
+
         <div className="row">
           <Icon name="key" />
           <span className="file-text grow">
-            <span className="t-body-m-strong">{gpt.connected ? "ChatGPT plan" : "Use your ChatGPT plan"}</span>
+            <span className="t-body-m-strong">
+              {gpt.connected ? "ChatGPT plan" : "Use your ChatGPT plan (Sign in with ChatGPT)"}
+            </span>
             <span className="t-body-s muted">
               {gpt.connected
                 ? (gpt.email ?? "Signed in")
                 : gpt.signingIn
-                  ? "Finish signing in in your browser; this page updates by itself. If OpenAI says a required permission is unavailable, your account needs an active Plus or Pro plan."
-                  : "Complete eligible AI requests in this app with usage included in your ChatGPT plan or credits balance."}
+                  ? "Finish signing in in your browser; this page updates by itself. If OpenAI says a required permission is unavailable, your plan can't be shared this way: use Codex above, which works with every plan."
+                  : "For ChatGPT Go, Plus, Pro or Business. Complete eligible AI requests in this app with usage included in your ChatGPT plan or credits balance."}
             </span>
             {gpt.signingIn && link && (
               <a className="link t-body-s" href={link} target="_blank" rel="noreferrer" onClick={() => setLink(null)}>
@@ -147,7 +162,7 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
                     className="t-body-s plan-model"
                     aria-label="ChatGPT model"
                     value={gpt.model ?? ""}
-                    onChange={(e) => void call("/subscriptions/chatgpt", "PUT", { model: e.target.value })}
+                    onChange={(ev) => void call("/subscriptions/chatgpt", "PUT", { model: ev.target.value })}
                   >
                     {gpt.models.map((m) => (
                       <option key={m.slug} value={m.slug}>
@@ -189,49 +204,25 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
         )}
 
         <div className="row">
-          <Icon name="terminal" />
+          <Icon name="key" />
           <span className="file-text grow">
-            <span className="t-body-m-strong">Use your Claude plan (Claude Code)</span>
-            <span className="t-body-s muted">{ccLine}</span>
-            {!cc.path && (
-              <span className="install-line">
-                <code className="t-mono-s">{cc.install}</code>
-                <Button
-                  small
-                  onClick={() => {
-                    void navigator.clipboard?.writeText(cc.install).then(() => setCopied(true));
-                  }}
-                >
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-                <span className="t-body-s muted">then</span>
-                <code className="t-mono-s">{cc.signIn}</code>
-              </span>
-            )}
+            <span className="t-body-m-strong">Google AI Pro or Ultra</span>
+            <span className="t-body-s muted">
+              Google doesn't let other apps use these plans. A free Gemini API key works instead.
+            </span>
           </span>
-          {cc.connected ? (
-            <>
-              <Pill label="Connected" tone="success" />
-              <Button small disabled={busy} onClick={() => void call("/subscriptions/claude-code", "DELETE")}>
-                Remove
-              </Button>
-            </>
-          ) : cc.path && cc.signedIn && cc.method !== "api_key" ? (
-            <Button kind="secondary" small disabled={busy || agreeing} onClick={() => setAgreeing(true)}>
-              Connect
-            </Button>
-          ) : (
-            <Button small disabled={busy} onClick={() => void call("/subscriptions/claude-code/check")}>
-              Check again
+          {onAddKey && (
+            <Button small onClick={() => onAddKey("gemini")}>
+              Add a free key
             </Button>
           )}
         </div>
       </div>
-      {agreeing && (
+      {agreeTo && (
         <div className="card">
-          <span className="t-title-m">Covo will run your Claude Code program to do tasks</span>
+          <span className="t-title-m">Covo will run {agreeTo.label} to do tasks</span>
           <ul className="notice t-body-s secondary">
-            {CLAUDE_NOTICE.map((line) => (
+            {agreeTo.notice.map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ul>
@@ -241,12 +232,12 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
               kind="primary"
               disabled={busy}
               onClick={async () => {
-                if (await call("/subscriptions/claude-code", "POST", { accept: true })) setAgreeing(false);
+                if (await call(`/subscriptions/${agreeTo.id}`, "POST", { accept: true })) setAgreeing(null);
               }}
             >
-              Use my Claude plan
+              Use my {planOf(agreeTo)} plan
             </Button>
-            <Button onClick={() => setAgreeing(false)}>Cancel</Button>
+            <Button onClick={() => setAgreeing(null)}>Cancel</Button>
           </div>
         </div>
       )}
@@ -270,12 +261,95 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
                   setRoutines(
                     await api<ApiRoutineSettings>("/routine-settings", { method: "PUT", body: { subscriptions: on } }),
                   );
-                } catch (e) {
-                  setError((e as Error).message);
+                } catch (err) {
+                  setError((err as Error).message);
                 }
               }}
             />
           </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** One program that uses your plan: Get → Sign in → Connect. */
+function EngineRow({
+  e,
+  busy,
+  agreeing,
+  onAgree,
+  call,
+}: {
+  e: ApiEngine;
+  busy: boolean;
+  agreeing: boolean;
+  onAgree: () => void;
+  call: (path: string, method?: string, body?: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const plan = planOf(e);
+  const base = `/subscriptions/${e.id}`;
+  const canSignIn = Boolean(e.path) && (e.signedIn === false || e.method === "api_key");
+
+  let line: string;
+  if (e.connected) line = `Uses your ${plan} plan, through ${e.label} on this Mac`;
+  else if (e.installing) line = `Getting ${e.label} from ${e.maker}… ${e.step ?? ""}`.trim();
+  else if (e.signingIn) line = `Finish signing in on ${e.maker}'s page in your browser. This updates by itself.`;
+  else if (!e.path)
+    line = `${e.maker === "OpenAI" ? "Works with every ChatGPT plan, Free included." : "For Claude Pro, Max or Ultra."} Covo gets it with ${e.maker}'s own installer (about ${e.downloadMb} MB).`;
+  else if (e.signedIn === null) line = busy ? "Checking whether you're signed in…" : `Installed at ${tilde(e.path)}`;
+  else if (!e.signedIn) line = `Installed. Sign in with your ${plan} account.`;
+  else if (e.method === "api_key")
+    line = `Signed in with an API key, which would bill that key, not your plan. Sign in with your ${plan} account instead.`;
+  else line = `Signed in · ready to use your ${plan} plan`;
+
+  return (
+    <>
+      <div className="row">
+        <Icon name="terminal" />
+        <span className="file-text grow">
+          <span className="t-body-m-strong">
+            Use your {plan} plan ({e.label})
+          </span>
+          <span className="t-body-s muted">{line}</span>
+          {e.signingIn && e.url && (
+            <a className="link t-body-s" href={e.url} target="_blank" rel="noreferrer">
+              Browser didn't open? Open {e.maker}'s sign-in page
+            </a>
+          )}
+        </span>
+        {e.connected ? (
+          <>
+            <Pill label="Connected" tone="success" />
+            <Button small disabled={busy} onClick={() => void call(base, "DELETE")}>
+              {e.maker === "OpenAI" ? "Sign out" : "Remove"}
+            </Button>
+          </>
+        ) : e.installing || e.signingIn ? (
+          <Button small onClick={() => void call(`${base}/cancel`)}>
+            Cancel
+          </Button>
+        ) : !e.path ? (
+          <Button kind="secondary" small disabled={busy} onClick={() => void call(`${base}/install`)}>
+            Get {e.label}
+          </Button>
+        ) : canSignIn ? (
+          <Button kind="secondary" small disabled={busy} onClick={() => void call(`${base}/sign-in`)}>
+            Sign in
+          </Button>
+        ) : e.signedIn ? (
+          <Button kind="secondary" small disabled={busy || agreeing} onClick={onAgree}>
+            Connect
+          </Button>
+        ) : (
+          <Button small disabled={busy} onClick={() => void call(`${base}/check`)}>
+            Check again
+          </Button>
+        )}
+      </div>
+      {e.error && !e.installing && !e.signingIn && (
+        <div className="row">
+          <span className="t-body-s danger">{e.error}</span>
         </div>
       )}
     </>

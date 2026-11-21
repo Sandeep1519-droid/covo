@@ -2,14 +2,15 @@
 
 Phase 2, M6. ADR-009 says: **terms first.** Before Covo runs anything on someone's Claude, ChatGPT or Gemini subscription, we record what each company's terms say right now. We build only what they allow, keep it opt-in, and never copy or reuse login tokens.
 
-Checked on **18 November 2026**. Terms change, so check again before each release. The "Re-check" column says where to look.
+First checked on **18 November 2026**, last on **22 November 2026** (see the update at the end). Terms change, so check again before each release. The "Re-check" lines say where to look.
 
 ## Summary
 
 | Subscription | Official tool | What the terms say | Covo |
 |---|---|---|---|
-| Claude Pro, Max or Ultra | Claude Code (`claude`) | Allowed, with conditions: you sign in to the **unmodified** Claude Code program yourself, through Anthropic's own sign-in. Other apps may not take, store or pass along your sign-in. | **Built (opt-in):** Covo runs your installed `claude` program in its sandbox. Covo never sees your sign-in. In the app: Settings → AI models → Connect (Phase 4 M1), after `claude auth status` says you signed in with your Claude account, not an API key. |
-| ChatGPT Plus or Pro | Sign in with ChatGPT (OpenAI's sign-in for apps); Codex CLI (`codex`) | **Allowed for open-source apps on your own computer** (a preview, checked 20 Nov 2026): you approve on OpenAI's page, and use counts against your plan. Paid or hosted apps need OpenAI's approval. Driving the Codex program on its own sign-in is still not covered. | **Built (opt-in, Phase 4 M1):** Settings → AI models → Continue with ChatGPT, or `covo models add chatgpt`. Covo signs in itself and keeps its own tokens in the Keychain; it never reads Codex's sign-in file. |
+| Claude Pro, Max or Ultra | Claude Code (`claude`) | Allowed, with conditions: you sign in to the **unmodified** Claude Code program yourself, through Anthropic's own sign-in. Products may install or run Claude Code. Other apps may not take, store or pass along your sign-in. | **Built (opt-in):** Covo runs Claude Code in its sandbox and never sees your sign-in. In the app (Settings → AI models): **Get** runs Anthropic's installer, **Sign in** starts Claude Code's own sign-in, then **Connect**. |
+| ChatGPT, any plan, including Free | Codex (`codex`) | **Allowed** (checked 22 Nov 2026): OpenAI's Codex SDK docs describe running Codex inside your own app, and Codex comes with every ChatGPT plan. | **Built (opt-in):** **Get**, **Sign in** (Codex's own ChatGPT sign-in), **Connect**. Covo's Codex has its own Codex folder, and its network reaches only OpenAI. |
+| ChatGPT Go, Plus, Pro or Business | Sign in with ChatGPT (OpenAI's sign-in for apps) | **Allowed for open-source apps on your own computer** (a preview, checked 20 Nov 2026): you approve on OpenAI's page, and use counts against your plan. Free accounts can't share their plan this way. | **Built (opt-in, Phase 4 M1):** Settings → AI models → Continue with ChatGPT, or `covo models add chatgpt`. Covo signs in itself and keeps its own tokens in the Keychain. |
 | Google AI Pro or Ultra | Gemini CLI (`gemini`), now Antigravity CLI (`agy`) | Gemini CLI's "Login with Google" stopped working for these plans on 18 June 2026. Antigravity's terms forbid accessing the service through third-party software, and Google has suspended accounts for it. | **Not built.** Use a Gemini API key (free tier available: `covo models add gemini`). |
 
 ## Claude (Anthropic)
@@ -109,11 +110,65 @@ What we found:
 
 **Re-check:** the [deprecation page](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals), Antigravity's terms and FAQ, and the [Gemini API terms](https://ai.google.dev/gemini-api/terms).
 
+## Update, 22 November 2026: get and sign in from the app, and Codex
+
+The user asked for what other bots offer: get the AI programs and sign in from inside the app, with no Terminal. We checked the terms again and looked at how other bots do it.
+
+**What other bots do** (their own docs, read 22 Nov 2026)
+- **OpenClaw** runs your installed Claude Code, which keeps its own sign-in. You install it and run `claude auth login` yourself. For ChatGPT, OpenClaw runs Codex's sign-in with its own code (browser or device code), or Sign in with ChatGPT. For Gemini it now uses an API key and no longer creates Google sign-ins. Sources: [OpenAI sign-in](https://docs.openclaw.ai/providers/openai/authentication), [CLI backends](https://docs.openclaw.ai/gateway/cli-backends).
+- **Hermes Agent** signs in to Codex itself with a device code, and has an experimental plugin that runs Claude Code. Source: [providers](https://hermes-agent.nousresearch.com/docs/integrations/providers).
+- **Zed** installs Claude, Codex and Gemini CLI from its own agent list. Each program then signs you in with its own flow, and Zed never sees the tokens. Source: [external agents](https://zed.dev/docs/ai/external-agents).
+
+**Claude (Anthropic)**
+
+Sources, read 22 Nov 2026: [legal and compliance](https://code.claude.com/docs/en/legal-and-compliance) and [Using the Agent SDK with your plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).
+- The legal page covers products that preinstall or run Claude Code. Its conditions:
+  - the program stays unmodified, with none of its sign-in options removed or restricted;
+  - each person signs in with their own account, through Anthropic's own flow;
+  - the product doesn't resell or intermediate usage;
+  - Anthropic's names and logos stay out of the product's name and logo. Saying in plain text that it runs Claude Code is fine.
+- Developers still may not collect, store or pass along Claude sign-ins, or route requests through plan credentials on their users' behalf. Products built on the Agent SDK should use API keys.
+- The help article has updates from 15 June and 7 October 2026. When you're signed in with your plan, `claude -p` and the Agent SDK draw from your plan's limits. The monthly API credits included with Max, Ultra and Team plans cover API-key use only.
+
+**Decision:** built.
+- **Get** runs Anthropic's official installer.
+- **Sign in** starts Claude Code's own sign-in (`claude auth login --claudeai`). Your browser opens Anthropic's page, and Claude Code keeps the sign-in in your Keychain; Covo never sees it. The app shows the link Claude Code prints, in case the browser doesn't open.
+
+**ChatGPT (OpenAI)**
+
+Sources, read 22 Nov 2026: [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk), [Codex pricing](https://learn.chatgpt.com/docs/pricing), [Codex CLI](https://learn.chatgpt.com/docs/cli), [authentication](https://learn.chatgpt.com/docs/auth), [Sign in with ChatGPT](https://learn.chatgpt.com/docs/sign-in-with-chatgpt).
+- The Codex SDK page lists running Codex inside your own application as a use. It also describes Codex's app server for building your own clients, including their sign-in. That settles the question we left open on 18 November: another app may run the official Codex program.
+- Codex comes with every ChatGPT plan: Free, Go, Plus, Pro, Business, Edu and Enterprise. Free and Go are meant for lighter use.
+- Sign in with ChatGPT lets an app use only Go, Plus, Pro and Business plans. A Free account can't grant it, which is why OpenAI's page told our user "a required permission is unavailable".
+- The authentication page still recommends API keys for automation, and says to treat Codex's `auth.json` like a password.
+- Official installer: `curl -fsSL https://chatgpt.com/codex/install.sh | sh`. It puts `codex` in `~/.local/bin`, and the program itself in `~/.codex/packages`.
+
+**Decision:** built, as a second engine (opt-in). How Covo follows the rules:
+- **Get and sign-in:** **Get** runs OpenAI's official installer. **Sign in** starts Codex's own Sign in with ChatGPT (`codex login`). Codex handles the sign-in and keeps it; Covo never reads it.
+- **Its own Codex folder:** Covo's Codex uses `~/Covo/engines/codex` instead of `~/.codex`. It never sees your own Codex settings, sign-in or history, and the `codex` you use in Terminal isn't affected. Covo tells Codex to keep its sign-in in that folder (`auth.json`) rather than the Keychain, so the sandbox needs no Keychain access.
+- **How tasks run:**
+  - The command is `codex exec --json --ephemeral --ignore-user-config --ignore-rules`, with approvals off and web search off.
+  - It works on Covo's copy of your files, in Covo's sandbox.
+  - Codex's own sandbox is off, because macOS can't put one sandbox inside another.
+- **Network limited to OpenAI:** Codex reads files by running commands, so unlike Claude Code in Covo it has a shell. Its network goes only through a small filter inside Covo, which lets it reach OpenAI's servers (`*.openai.com`, `*.chatgpt.com`, port 443) and nothing else. The sandbox blocks DNS and every other connection. So a bad instruction in a file can't send your files anywhere.
+- **Trade-off:** inside the sandbox, Codex, and any command it runs, can read Codex's own sign-in file. With the network limited to OpenAI, the file can't be sent anywhere else.
+- **Routines:** they don't use Codex unless you allow subscriptions for routines. OpenAI recommends API keys for automation, so this stays off by default.
+
+**Google**
+
+Sources, read 22 Nov 2026: the [deprecation page](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals), and a [reply on Google's developer forum](https://discuss.ai.google.dev/t/supported-gemini-subscription-access-for-a-third-party-vs-code-extension/189889) saying other apps have no supported way to use Google AI Plus, Pro or Ultra, or the Antigravity sign-in.
+
+**Decision:** unchanged. The app says so and links to a free Gemini API key.
+
+**Re-check:** the Codex SDK and pricing pages, Anthropic's legal and compliance page, and the Sign in with ChatGPT page.
+
 ## Rules for any future engine
 
 1. Read the provider's current terms and record them here, with dates and links.
-2. Run only the provider's official program, unmodified, which the user installed and signed into themselves.
+2. Run only the provider's official program, unmodified. The user signs in to it through the program's own sign-in.
 3. Never read, copy, store or send the user's login or tokens.
 4. Make it opt-in and say plainly what happens.
-5. Run it in Covo's sandbox, on a workspace copy, with the fewest tools that do the job.
+5. Run it in Covo's sandbox, on a workspace copy, with the fewest tools that do the job. If it needs a shell, its network reaches only its maker's servers.
 6. Log its usage and fall back down the bot's chain when it hits a limit.
+7. Install only with the maker's official installer, from the maker's own site, and only when the user presses Get.
+8. Start the program's own sign-in, and show only the link it prints. Never handle the token.

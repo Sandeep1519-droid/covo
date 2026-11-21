@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ApiModel, ApiSubscriptions } from "@covo/api";
+import type { ApiEngine, ApiModel, ApiSubscriptions } from "@covo/api";
 import { covoPaths } from "@covo/core";
 import { openDb } from "@covo/db";
 import { browse, fakeClock, fakeOpenAI } from "@covo/models/fake-openai";
@@ -12,7 +12,8 @@ import { apiToken } from "./gate.ts";
 import { type Running, serve } from "./server.ts";
 
 // Phase 4 M1: your own AI plans, from the app. ChatGPT through Sign in with ChatGPT (against a
-// stand-in for OpenAI), and Claude through the Claude Code program (with a stand-in for its answers).
+// stand-in for OpenAI), Claude through the Claude Code program (with a stand-in for its answers), and
+// Codex: Get runs a stand-in installer, Sign in a stand-in for Codex's own sign-in.
 
 let root: string;
 let home: string;
@@ -60,6 +61,7 @@ const api = (path: string, init: RequestInit = {}) =>
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...init.headers },
   });
 const status = async () => (await (await api("/subscriptions")).json()) as ApiSubscriptions;
+const row = (s: ApiSubscriptions, id: string) => s.engines.find((e) => e.id === id) as ApiEngine;
 async function until<T>(get: () => Promise<T | false | undefined> | T | false | undefined, what: string): Promise<T> {
   for (let i = 0; i < 250; i++) {
     const v = await get();
@@ -154,7 +156,7 @@ describe("your ChatGPT plan, from the app", () => {
       return !x.chatgpt.signingIn && x;
     }, "the sign-in to end");
     expect(s.chatgpt.connected).toBe(false);
-    expect(s.chatgpt.error).toContain("needs an active ChatGPT Plus or Pro plan");
+    expect(s.chatgpt.error).toContain("needs an active ChatGPT Go, Plus, Pro or Business plan");
     expect(secrets.items.size).toBe(0);
     expect(await (await api("/models")).json()).toEqual([]);
   });
@@ -169,18 +171,21 @@ describe("your Claude plan, through Claude Code", () => {
       engineSignIn: async () => signIn,
     });
     let s = await status();
-    expect(s.claudeCode).toMatchObject({
+    expect(row(s, "claude-code")).toMatchObject({
       path: null,
+      maker: "Anthropic",
       install: "curl -fsSL https://claude.ai/install.sh | bash",
       signIn: "claude auth login",
       connected: false,
+      installing: false,
     });
+    expect(row(s, "claude-code").notice[0]).toContain("Covo never sees, copies or stores your sign-in");
 
     path = "/Users/me/.local/bin/claude";
     s = (await (
       await api("/subscriptions/claude-code/check", { method: "POST", body: "{}" })
     ).json()) as ApiSubscriptions;
-    expect(s.claudeCode).toMatchObject({ path, signedIn: false });
+    expect(row(s, "claude-code")).toMatchObject({ path, signedIn: false });
 
     // Signed in with an API key: tasks would bill that key, not your plan.
     signIn = { signedIn: true, method: "api_key" };
@@ -193,7 +198,7 @@ describe("your Claude plan, through Claude Code", () => {
     s = (await (
       await api("/subscriptions/claude-code", { method: "POST", body: JSON.stringify({ accept: true }) })
     ).json()) as ApiSubscriptions;
-    expect(s.claudeCode).toMatchObject({
+    expect(row(s, "claude-code")).toMatchObject({
       connected: true,
       connection: "claude-sub",
       signedIn: true,
@@ -203,6 +208,128 @@ describe("your Claude plan, through Claude Code", () => {
       expect.objectContaining({ name: "claude-sub", subscription: "claude-code", engine: true }),
     ]);
     s = (await (await api("/subscriptions/claude-code", { method: "DELETE" })).json()) as ApiSubscriptions;
-    expect(s.claudeCode.connected).toBe(false);
+    expect(row(s, "claude-code").connected).toBe(false);
+  });
+});
+
+describe("your ChatGPT plan, through Codex", () => {
+  /** A stand-in for OpenAI's installer: it puts a stand-in codex in ~/.local/bin. */
+  const INSTALLER = `#!/bin/sh
+echo "==> Installing Codex CLI"
+mkdir -p "$HOME/.local/bin"
+cat > "$HOME/.local/bin/codex" <<'EOS'
+#!/bin/sh
+case "$1" in
+  --version) echo "codex-cli 0.0.0-test" ;;
+  login)
+    if [ "$2" = "status" ]; then
+      if [ -f "$CODEX_HOME/auth.json" ]; then echo "Logged in using ChatGPT" >&2; exit 0; fi
+      echo "Not logged in" >&2; exit 1
+    fi
+    echo "Starting local login server on http://localhost:1455." >&2
+    echo "If your browser did not open, navigate to this URL to authenticate:" >&2
+    echo "" >&2
+    echo "https://auth.openai.com/oauth/authorize?client_id=test&state=abc" >&2
+    while [ ! -f "$CODEX_HOME/approve" ]; do sleep 0.05; done
+    echo "{}" > "$CODEX_HOME/auth.json"
+    echo "Successfully logged in" >&2 ;;
+  logout) rm -f "$CODEX_HOME/auth.json"; echo "Successfully logged out" >&2 ;;
+esac
+EOS
+chmod +x "$HOME/.local/bin/codex"
+echo "==> Codex CLI installed"
+`;
+
+  test("Get runs the installer, Sign in starts Codex's own sign-in, then Connect; Sign out revokes it", async () => {
+    const srv = Bun.serve({ port: 0, fetch: () => new Response(INSTALLER) });
+    try {
+      await start({}, { COVO_INSTALLER_CODEX: `http://127.0.0.1:${srv.port}/install.sh`, PATH: "/usr/bin:/bin" });
+      let s = await status();
+      expect(row(s, "codex")).toMatchObject({ path: null, maker: "OpenAI", installing: false, connected: false });
+      expect(row(s, "codex").notice.join(" ")).toContain("its network reaches only OpenAI's servers");
+
+      expect((await api("/subscriptions/codex/install", { method: "POST", body: "{}" })).status).toBe(200);
+      s = await until(async () => {
+        const x = await status();
+        return !row(x, "codex").installing && row(x, "codex").signedIn !== null && x;
+      }, "Codex to be installed and checked");
+      expect(row(s, "codex")).toMatchObject({
+        path: join(root, ".local/bin/codex"),
+        signedIn: false,
+        error: null,
+      });
+
+      // Connecting before signing in is refused.
+      const early = await api("/subscriptions/codex", { method: "POST", body: JSON.stringify({ accept: true }) });
+      expect(early.status).toBe(409);
+
+      expect((await api("/subscriptions/codex/sign-in", { method: "POST", body: "{}" })).status).toBe(200);
+      s = await until(async () => {
+        const x = await status();
+        return row(x, "codex").url ? x : false;
+      }, "the sign-in link");
+      expect(row(s, "codex")).toMatchObject({
+        signingIn: true,
+        url: "https://auth.openai.com/oauth/authorize?client_id=test&state=abc",
+      });
+      // You finish signing in on OpenAI's page: Codex saves its sign-in in Covo's Codex folder.
+      const codexHome = join(home, "engines", "codex");
+      writeFileSync(join(codexHome, "approve"), "");
+      s = await until(async () => {
+        const x = await status();
+        return !row(x, "codex").signingIn && row(x, "codex").signedIn ? x : false;
+      }, "the sign-in to finish");
+      expect(row(s, "codex")).toMatchObject({ signedIn: true, method: "chatgpt", url: null });
+
+      s = (await (
+        await api("/subscriptions/codex", { method: "POST", body: JSON.stringify({ accept: true }) })
+      ).json()) as ApiSubscriptions;
+      expect(row(s, "codex")).toMatchObject({ connected: true, connection: "codex" });
+      expect(await (await api("/models")).json()).toEqual([
+        expect.objectContaining({ name: "codex", subscription: "codex", engine: true }),
+      ]);
+
+      s = (await (await api("/subscriptions/codex", { method: "DELETE" })).json()) as ApiSubscriptions;
+      expect(row(s, "codex").connected).toBe(false);
+      expect(existsSync(join(codexHome, "auth.json"))).toBe(false);
+      expect(actions()).toEqual(
+        expect.arrayContaining([
+          "engine.installed",
+          "engine.signed-in",
+          "subscription.connected",
+          "subscription.removed",
+        ]),
+      );
+    } finally {
+      srv.stop(true);
+    }
+  });
+
+  test("an installer that fails says why; a sign-in can be cancelled", async () => {
+    let script = '#!/bin/sh\necho "error: this Mac is not supported" >&2\nexit 3\n';
+    const srv = Bun.serve({ port: 0, fetch: () => new Response(script) });
+    try {
+      await start({}, { COVO_INSTALLER_CODEX: `http://127.0.0.1:${srv.port}/install.sh`, PATH: "/usr/bin:/bin" });
+      await api("/subscriptions/codex/install", { method: "POST", body: "{}" });
+      let s = await until(async () => {
+        const x = await status();
+        return row(x, "codex").error ? x : false;
+      }, "the installer to fail");
+      expect(row(s, "codex").error).toBe("OpenAI's installer stopped (code 3): error: this Mac is not supported");
+
+      script = INSTALLER;
+      await api("/subscriptions/codex/install", { method: "POST", body: "{}" });
+      await until(async () => row(await status(), "codex").signedIn === false, "the install");
+      await api("/subscriptions/codex/sign-in", { method: "POST", body: "{}" });
+      await until(async () => row(await status(), "codex").url, "the sign-in link");
+      s = (await (await api("/subscriptions/codex/cancel", { method: "POST", body: "{}" })).json()) as ApiSubscriptions;
+      s = await until(async () => {
+        const x = await status();
+        return !row(x, "codex").signingIn && x;
+      }, "the cancel");
+      expect(row(s, "codex")).toMatchObject({ signedIn: false, error: null });
+    } finally {
+      srv.stop(true);
+    }
   });
 });

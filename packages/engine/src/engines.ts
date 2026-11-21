@@ -5,12 +5,10 @@ import type { Sandbox, SandboxOptions } from "@covo/platform";
 
 // Subscription engines (Phase 2 M6, ADR-009, docs/SUBSCRIPTIONS.md).
 //
-// An engine is an official AI command-line program the user installed and signed into themselves,
-// such as Claude Code. Covo runs it unmodified, headless, on the run's workspace copy, inside the
-// cli-agent sandbox profile. Covo never reads, copies or stores the program's sign-in: the program
-// reads its own, as it always does.
-//
-// Only Claude Code is built: the other subscriptions' terms don't allow it (see the doc).
+// An engine is an official AI command-line program from its maker, signed in with its own sign-in:
+// Claude Code here, Codex in codex.ts. Covo runs it unmodified, headless, on the run's workspace
+// copy, inside Covo's sandbox. Covo never reads, copies or stores the program's sign-in: the program
+// reads its own, as it always does. Google's plans aren't built: their terms don't allow it.
 
 export interface EngineTask {
   /** The run's workspace copy (real path). */
@@ -44,6 +42,8 @@ export interface EngineResult {
   /** Tool uses the engine's own permission rules refused. */
   denied: number;
   model?: string;
+  /** Places Covo's network filter refused to connect it to (Codex). */
+  blockedHosts?: string[];
 }
 
 export interface Engine {

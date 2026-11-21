@@ -39,6 +39,8 @@ export interface SandboxOptions {
   network?: boolean;
   /** and the Keychain services, so the engine can read its own sign-in. */
   keychain?: boolean;
+  /** With the network off, the one local port it may connect to (Covo's filter to the engine's maker). */
+  proxyPort?: number;
   /** Sent to the command's standard input. */
   stdin?: string;
   /** Stops the command (SIGINT) when aborted. */

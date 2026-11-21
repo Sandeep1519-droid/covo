@@ -11,6 +11,7 @@ import {
   ENGINES,
   type EngineInfo,
   engineById,
+  engineNotice,
   listModelsFor,
   loadSettings,
   type ModelConfig,
@@ -31,7 +32,15 @@ import {
 import { secrets as defaultSecrets, SecretError } from "@covo/platform";
 import type { CliResult, Ctx } from "../main.ts";
 import { Cancelled } from "../prompt.ts";
-import { checkEngine, findProgram } from "./engines.ts";
+import {
+  checkEngine,
+  engineSignIn,
+  findProgram,
+  signInArgv,
+  signInEnv,
+  signOutEngine,
+  startInstall,
+} from "./engines.ts";
 
 // covo models: connect the AI services you use. Keys go to the macOS Keychain.
 
@@ -41,8 +50,12 @@ const USAGE = `Usage:
       [--name <n>] [--model <m>] [--base-url <url>] [--key-stdin] [--default] [--no-test]
   covo models add claude-code         Use your Claude subscription through Claude Code
       [--name <n>] [--model default|sonnet|opus|haiku|fable] [--default] [--yes]
-  covo models add chatgpt             Use your ChatGPT Plus or Pro plan (Sign in with ChatGPT)
+  covo models add codex               Use your ChatGPT plan (any plan, Free too) through Codex
+      [--name <n>] [--default] [--yes]
+  covo models add chatgpt             Use your ChatGPT Go, Plus, Pro or Business plan (Sign in with ChatGPT)
       [--model <m>] [--default]
+  covo models install <claude-code|codex>   Get the program with its maker's own installer
+  covo models sign-in <claude-code|codex>   Sign in with the program's own sign-in
   covo models test [name]             Send one small test request
   covo models default <name>          Use this one when a bot doesn't say otherwise
   covo models remove <name>           Forget it and delete its key from the Keychain
@@ -72,6 +85,8 @@ export async function modelsCommand(ctx: Ctx, args: string[]): Promise<CliResult
     if (!sub || sub === "list") return await listModels(ctx);
     if (sub === "add") return await add(ctx, rest);
     if (sub === "test") return await test(ctx, rest[0]);
+    if (sub === "install" && rest[0]) return await installEngine(ctx, rest[0]);
+    if (sub === "sign-in" && rest[0]) return await signInEngine(ctx, rest[0]);
     if (sub === "default" && rest[0]) {
       setDefault(ctx.home, rest[0]);
       return { code: 0, out: `Bots now use "${rest[0]}" unless they say otherwise.\n` };
@@ -82,6 +97,13 @@ export async function modelsCommand(ctx: Ctx, args: string[]): Promise<CliResult
         await signOutChatGPT(chatgptOptions(ctx));
         await removeConnection(ctx.home, store(ctx), was.name);
         return { code: 0, out: `Signed out of ChatGPT and removed "${was.name}".\n` };
+      }
+      const own = was ? engineById(was.provider) : undefined;
+      if (was && own?.ownHome) {
+        // Covo's own copy of the program: its sign-in goes too (and is revoked).
+        await removeConnection(ctx.home, store(ctx), was.name);
+        await signOutEngine(ctx, own);
+        return { code: 0, out: `Signed Covo's ${own.label} out and removed "${was.name}".\n` };
       }
       const c = await removeConnection(ctx.home, store(ctx), rest[0]);
       return { code: 0, out: `Removed "${c.name}"${c.keyId ? " and deleted its key from the Keychain" : ""}.\n` };
@@ -141,10 +163,10 @@ function describeDetected(d: Detected): string[] {
     const en = ENGINES.find((e) => e.command === c.name);
     out.push(
       en
-        ? `${en.label} (${c.path}): use ${en.plan} with: covo models add ${en.id}`
-        : c.name === "codex"
-          ? `Codex (${c.path}): Covo doesn't use the Codex program's sign-in, but you can use your ChatGPT plan with: covo models add chatgpt`
-          : `The ${c.name} command-line tool (${c.path}): its terms don't allow other apps to use the subscription (see docs/SUBSCRIPTIONS.md); connect an API key instead`,
+        ? en.ownHome
+          ? `${en.label} (${c.path}): use ${en.plan} with: covo models sign-in ${en.id}, then covo models add ${en.id}`
+          : `${en.label} (${c.path}): use ${en.plan} with: covo models add ${en.id}`
+        : `The ${c.name} command-line tool (${c.path}): its terms don't allow other apps to use the subscription (see docs/SUBSCRIPTIONS.md); connect an API key instead`,
     );
   }
   return out;
@@ -176,7 +198,7 @@ async function add(ctx: Ctx, args: string[]): Promise<CliResult> {
       print(`  ${String(PRESETS.length + i + 1).padStart(2)}. ${`${en.label}: ${en.plan}`.padEnd(46)} ${hint}\n`);
     });
     print(
-      `  ${String(PRESETS.length + ENGINES.length + 1).padStart(2)}. ${"ChatGPT: your ChatGPT Plus or Pro plan".padEnd(46)} sign in with ChatGPT\n`,
+      `  ${String(PRESETS.length + ENGINES.length + 1).padStart(2)}. ${"ChatGPT: your Go, Plus, Pro or Business plan".padEnd(46)} sign in with ChatGPT\n`,
     );
     const a = await ask.ask("\nNumber or name:", "1");
     const all = [...PRESETS.map((p) => p.id), ...ENGINES.map((e) => e.id), "chatgpt"];
@@ -319,18 +341,26 @@ async function addEngine(ctx: Ctx, en: EngineInfo, opts: Record<string, string |
   if (!path) {
     return {
       code: 1,
-      out: `${en.label} isn't installed (no "${en.command}" on your PATH). Install it from ${en.installUrl}, sign in by running "${en.command}", then try again. Nothing was saved.\n`,
+      out: `${en.label} isn't on this Mac. Get it with: covo models install ${en.id} (or see ${en.installUrl}), sign in with: covo models sign-in ${en.id}, then try again. Nothing was saved.\n`,
     };
+  }
+  // Covo's own copy (Codex) has its own sign-in, so check it before saving anything.
+  if (en.ownHome) {
+    const st = await engineSignIn(ctx, en.id);
+    if (st.signedIn === false)
+      return { code: 1, out: `Sign in first: covo models sign-in ${en.id}. Nothing was saved.\n` };
+    if (st.method === "api_key")
+      return {
+        code: 1,
+        out: `${en.label} is signed in with an API key, which would bill that key, not your plan. Sign in with your account: covo models sign-in ${en.id}. Nothing was saved.\n`,
+      };
   }
   print(
     [
       `${en.label} found at ${path}.`,
       "",
       `Covo will run your ${en.label} program to do tasks, using ${en.plan}.`,
-      `  • You sign in with ${en.label} itself (run: ${en.command}). Covo never sees, copies or stores your sign-in.`,
-      "  • Tasks count toward your plan's usage limits. When you hit one, the bot's next model takes over.",
-      `  • ${en.label} works on Covo's copy of your files, with file tools only (no shell, no web).`,
-      "  • Covo's spending limits don't apply: a subscription is a flat fee.",
+      ...engineNotice(en).map((l) => `  • ${l}`),
       "  Details and the terms we checked: docs/SUBSCRIPTIONS.md",
       "",
     ].join("\n"),
@@ -371,6 +401,38 @@ async function addEngine(ctx: Ctx, en: EngineInfo, opts: Record<string, string |
   return { code: check.ok ? 0 : 1, out: lines.join("\n") };
 }
 
+/** covo models install <engine>: runs the maker's official installer, showing what it prints. */
+async function installEngine(ctx: Ctx, id: string): Promise<CliResult> {
+  const en = engineById(id);
+  if (!en) return { code: 2, out: `Covo can get: ${ENGINES.map((e) => e.id).join(", ")}\n` };
+  ctx.print(`Getting ${en.label} with ${en.maker}'s own installer (${en.install})\n`);
+  const job = startInstall(ctx, en, (l) => ctx.print(`  ${l}\n`));
+  try {
+    await job.done;
+  } catch (e) {
+    return { code: 1, out: `${(e as Error).message}\n` };
+  }
+  return { code: 0, out: `${en.label} is installed. Next: covo models sign-in ${en.id}\n` };
+}
+
+/** covo models sign-in <engine>: the program's own sign-in, right here in your terminal. */
+async function signInEngine(ctx: Ctx, id: string): Promise<CliResult> {
+  const en = engineById(id);
+  if (!en) return { code: 2, out: `Covo can sign in to: ${ENGINES.map((e) => e.id).join(", ")}\n` };
+  const path = findProgram(ctx, en.command, en.knownPaths);
+  if (!path) return { code: 1, out: `${en.label} isn't on this Mac. Get it first: covo models install ${en.id}\n` };
+  ctx.print(`Starting ${en.label}'s own sign-in. It opens ${en.maker}'s page in your browser.\n`);
+  const p = Bun.spawn(signInArgv(en, path), {
+    env: signInEnv(ctx, en, path),
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const code = await p.exited;
+  if (code !== 0) return { code: 1, out: `${en.label}'s sign-in didn't finish (code ${code}).\n` };
+  return { code: 0, out: `Signed in. Now: covo models add ${en.id}\n` };
+}
+
 /** Sign-in settings for your ChatGPT plan (tests point COVO_CHATGPT_AUTH and _API at stand-ins). */
 export function chatgptOptions(ctx: Ctx): ChatGPTOptions {
   return {
@@ -385,12 +447,12 @@ export function chatgptOptions(ctx: Ctx): ChatGPTOptions {
 export const CHATGPT_WELCOME =
   "You're using your ChatGPT plan. Eligible usage in this app uses your ChatGPT plan. Manage usage in your ChatGPT settings: https://chatgpt.com/settings/usage";
 
-/** Your ChatGPT Plus or Pro plan, through Sign in with ChatGPT (docs/SUBSCRIPTIONS.md). */
+/** Your ChatGPT Go, Plus, Pro or Business plan, through Sign in with ChatGPT (docs/SUBSCRIPTIONS.md). */
 async function addChatGPT(ctx: Ctx, opts: Record<string, string | true>): Promise<CliResult> {
   const o = chatgptOptions(ctx);
   ctx.print(
     [
-      "Covo will use your ChatGPT Plus or Pro plan for your bots' AI requests.",
+      "Covo will use your ChatGPT Go, Plus, Pro or Business plan for your bots' AI requests.",
       "  • You sign in on OpenAI's own page, in your browser. Covo never sees your password.",
       "  • Covo keeps its own sign-in in the macOS Keychain. It never uses the Codex program's sign-in.",
       "  • Use counts toward your plan's limits, shared with ChatGPT and Codex: https://chatgpt.com/settings/usage",

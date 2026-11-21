@@ -49,6 +49,11 @@ export interface ProfileOptions {
   network?: boolean;
   /** Allow talking to the Keychain services (an engine reading its own sign-in). */
   keychain?: boolean;
+  /**
+   * With the network off: allow connecting to this port on this Mac only, where Covo's filter
+   * passes traffic to the engine's maker and nothing else (docs/SUBSCRIPTIONS.md).
+   */
+  proxyPort?: number;
 }
 
 const reEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -72,6 +77,13 @@ function extras(o: ProfileOptions): string {
     );
   }
   return out.join("\n");
+}
+
+/** The one connection allowed with the network off: Covo's own filter on this Mac. */
+function proxyRule(o: ProfileOptions): string {
+  if (o.network || o.proxyPort === undefined) return "";
+  if (!Number.isInteger(o.proxyPort) || o.proxyPort < 1 || o.proxyPort > 65535) throw new Error("bad proxy port");
+  return `\n(allow system-socket)\n(allow network-outbound (remote ip "localhost:${o.proxyPort}"))`;
 }
 
 export function buildProfile(o: ProfileOptions): string {
@@ -98,7 +110,7 @@ export function buildProfile(o: ProfileOptions): string {
 ; folder. Allow only files named xcrun_db*, not the folder itself, which other apps share.
 (allow file-read* file-write* (regex #"^/private/var/folders/[^/]+/[^/]+/T/xcrun_db"))
 (deny file-read* file-write* ${ALWAYS_DENIED.map((p) => `(subpath ${lit(p)})`).join(" ")})
-${o.network ? extras(o) : `(deny network*)${o.keychain ? `\n${extras(o)}` : ""}`}
+${o.network ? extras(o) : `(deny network*)${o.keychain ? `\n${extras(o)}` : ""}${proxyRule(o)}`}
 `;
 }
 
@@ -121,6 +133,7 @@ export const macSandbox: Sandbox = {
       readWriteFilePrefixes: opts.readWriteFilePrefixes,
       network: opts.network,
       keychain: opts.keychain,
+      proxyPort: opts.proxyPort,
     });
     const proc = Bun.spawn([SANDBOX_EXEC, "-p", profile, ...argv], {
       cwd: workspace,

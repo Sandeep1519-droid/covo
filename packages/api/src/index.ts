@@ -162,7 +162,7 @@ export interface ApiModel {
   isDefault: boolean;
   /** A subscription engine (e.g. Claude Code). */
   engine: boolean;
-  /** Paid by your plan, not per use: "chatgpt" (Sign in with ChatGPT) or "claude-code". */
+  /** Paid by your plan, not per use: "chatgpt" (Sign in with ChatGPT), "claude-code" or "codex". */
   subscription: string | null;
 }
 
@@ -185,19 +185,40 @@ export interface ApiSubscriptions {
     error: string | null;
     manageUsageUrl: string;
   };
-  claudeCode: {
-    /** Where the claude program is, or null if it isn't installed. */
-    path: string | null;
-    /** The official install command, and how to sign in. */
-    install: string;
-    signIn: string;
-    /** From `claude auth status`; null until checked. */
-    signedIn: boolean | null;
-    /** "claude.ai" is a subscription; "api_key" would bill an API key instead. */
-    method: string | null;
-    connected: boolean;
-    connection: string | null;
-  };
+  /** Programs that use your plan: Claude Code and Codex (docs/SUBSCRIPTIONS.md). */
+  engines: ApiEngine[];
+}
+
+/** A program that uses your plan (Claude Code, Codex): get it, sign in, connect. */
+export interface ApiEngine {
+  id: string;
+  label: string;
+  /** Who makes it ("Anthropic", "OpenAI"). */
+  maker: string;
+  /** Whose plan it uses, for messages. */
+  plan: string;
+  /** Where the program is, or null if it isn't on this Mac. */
+  path: string | null;
+  /** The official install command, and how to sign in from a terminal. */
+  install: string;
+  signIn: string;
+  /** About how much Get downloads. */
+  downloadMb: number;
+  /** From the program itself (`claude auth status`, `codex login status`); null until checked. */
+  signedIn: boolean | null;
+  /** "claude.ai" or "chatgpt" is your plan; "api_key" would bill an API key instead. */
+  method: string | null;
+  connected: boolean;
+  connection: string | null;
+  /** Get or Sign in is running: its latest line, and the sign-in page it printed. */
+  installing: boolean;
+  signingIn: boolean;
+  step: string | null;
+  url: string | null;
+  /** Why the last Get or Sign in didn't finish. */
+  error: string | null;
+  /** What connecting means, in plain words (shown before you agree). */
+  notice: string[];
 }
 
 /** POST /api/models: the key goes straight to the Keychain. */
