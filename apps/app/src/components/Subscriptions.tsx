@@ -132,7 +132,7 @@ export function SubscriptionRows({ refresh }: { refresh: () => void }) {
               {gpt.connected
                 ? (gpt.email ?? "Signed in")
                 : gpt.signingIn
-                  ? "Finish signing in in your browser. This page updates by itself."
+                  ? "Finish signing in in your browser; this page updates by itself. If OpenAI says a required permission is unavailable, your account needs an active Plus or Pro plan."
                   : "Complete eligible AI requests in this app with usage included in your ChatGPT plan or credits balance."}
             </span>
             {gpt.signingIn && link && (

@@ -48,7 +48,7 @@ The safety rules don't change. Every new ability goes through the same checkpoin
 - **Verified:**
   - 13 new tests, against a stand-in OpenAI that signs its own ID tokens. They cover the full sign-in, renewal and rotation, a declined or forged sign-in, sign-out with revocation, the request format, errors, the app's API, the command line, and a task with a tool call on the plan.
   - Checked in the app the same way, with the stand-in.
-  - Your real accounts: waiting for your sign-in.
+  - Live, with your account (21 Nov): Covo reached OpenAI's own "Connect Covo to ChatGPT" page, which showed your identity and the "ChatGPT plan" permission. Your ChatGPT plan had ended, so OpenAI said the permission is unavailable and offered Upgrade. The earlier refused codes (invalid_grant) came from the same thing. Covo now says so in plain words. A full live check waits for an active Plus or Pro plan.
 - **Fixed after your first try:** the app had lost its sign-in. Sign-ins were kept only in the service's memory, so each restart of the service ended them, and the open window still ran the old page. Now:
   - sign-ins survive a restart, with only a fingerprint of each in `state/sessions.json`;
   - an open page reloads into a new version of the app, or offers a Reload button while you're typing;

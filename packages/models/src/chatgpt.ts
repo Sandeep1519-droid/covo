@@ -34,6 +34,10 @@ export const CHATGPT = {
   port: 1455,
 };
 
+/** What to say when OpenAI won't let Covo use the plan (seen live: a plan that ended). */
+export const PLAN_NEEDED =
+  "OpenAI didn't let Covo use your ChatGPT plan. Using it in other apps needs an active ChatGPT Plus or Pro plan; OpenAI's page says \"A required permission is unavailable\" when the plan doesn't include it. Nothing was saved.";
+
 const ACCESS_ID = "chatgpt-access";
 const REFRESH_ID = "chatgpt-refresh";
 const SIGN_IN_TIMEOUT_MS = 10 * 60_000;
@@ -341,6 +345,20 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
       account.clientId = clientId;
       writeAccount(o.home, account);
     }
+    // What you allowed on OpenAI's page. Without the plan, there's nothing to trade the code for.
+    const granted = url.searchParams.get("scope");
+    if (granted !== null) {
+      const names = granted.split(/[\s+]+/).filter(Boolean);
+      log(`callback ${a.n}: you allowed ${names.join(", ") || "nothing"}`);
+      if (!names.includes(CHATGPT.planScope)) {
+        finish(new ChatGPTError(PLAN_NEEDED));
+        return {
+          title: "Not connected",
+          text: "OpenAI didn't let Covo use your ChatGPT plan. This needs an active ChatGPT Plus or Pro plan. You can close this tab.",
+          status: 200,
+        };
+      }
+    }
     try {
       const t = await tokenRequest(o, {
         grant_type: "authorization_code",
@@ -366,7 +384,9 @@ export async function beginChatGPTSignIn(o: ChatGPTOptions & { port?: number }):
           };
         }
         const why = t.body.error_description ? `: ${t.body.error_description}` : "";
-        throw new ChatGPTError(`OpenAI refused the sign-in code (${t.body.error ?? t.status}${why}).`);
+        throw new ChatGPTError(
+          `OpenAI refused the sign-in code (${t.body.error ?? t.status}${why}). The usual reason: your ChatGPT account doesn't have an active Plus or Pro plan, which using it in other apps needs.`,
+        );
       }
       const scopes = (t.body.scope ?? url.searchParams.get("scope") ?? "").split(/[\s+]+/).filter(Boolean);
       // A valid sign-in alone isn't permission to use the plan.

@@ -154,7 +154,7 @@ describe("your ChatGPT plan, from the app", () => {
       return !x.chatgpt.signingIn && x;
     }, "the sign-in to end");
     expect(s.chatgpt.connected).toBe(false);
-    expect(s.chatgpt.error).toContain("didn't allow Covo to use your ChatGPT plan");
+    expect(s.chatgpt.error).toContain("needs an active ChatGPT Plus or Pro plan");
     expect(secrets.items.size).toBe(0);
     expect(await (await api("/models")).json()).toEqual([]);
   });

@@ -146,9 +146,10 @@ describe("Sign in with ChatGPT", () => {
   test("nothing is saved without the plan permission, with a forged ID token, or when you decline", async () => {
     fake = await fakeOpenAI({ scope: "openid profile email offline_access" });
     let s = await beginChatGPTSignIn(opts());
-    await browse(s.url);
-    await expect(s.done).rejects.toThrow("didn't allow Covo to use your ChatGPT plan");
+    expect(await browse(s.url)).toContain("needs an active ChatGPT Plus or Pro plan");
+    await expect(s.done).rejects.toThrow("needs an active ChatGPT Plus or Pro plan");
     expect(store.items.size).toBe(0);
+    expect(fake.s.token).toHaveLength(0); // no point trading a code that can't use the plan
     fake.stop();
 
     fake = await fakeOpenAI({ signWith: "other" });
