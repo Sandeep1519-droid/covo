@@ -39,3 +39,20 @@ export function reportDragRegions(): void {
   const keep = [...document.querySelectorAll(".rail button")].map(rect);
   n.postMessage({ type: "drag", drag, keep });
 }
+
+/**
+ * Asks the Mac app to sign this page in again (its sign-in ran out, or Covo's service was reset):
+ * it gets a fresh one-time code with its token and reloads the page at `route`.
+ */
+export function requestSignIn(route: string): boolean {
+  const n = native();
+  if (!n) return false;
+  n.postMessage({ type: "signIn", route });
+  return true;
+}
+
+/** The app build this page runs ("chunk-ab12cd34.js"), to compare with what the service serves now. */
+export function loadedBuild(): string | null {
+  const src = document.querySelector('script[type="module"][src*="chunk-"]')?.getAttribute("src") ?? "";
+  return src.match(/chunk-[a-z0-9]+\.js/)?.[0] ?? null;
+}

@@ -17,7 +17,7 @@ import type { Ctx } from "../main.ts";
 import { type Prepared, PrepareError, prepareRun, type RunHeader, type RunRequest } from "../runner.ts";
 import { json as apiJson, handleApi } from "./api.ts";
 import { serviceHealth, socketPath } from "./client.ts";
-import { apiToken, Gate, RefusalLog } from "./gate.ts";
+import { apiToken, Gate, RefusalLog, sessionsPath } from "./gate.ts";
 import { PhoneManager } from "./phone.ts";
 import { RoutineScheduler } from "./routines.ts";
 import { Subscriptions } from "./subscriptions.ts";
@@ -316,7 +316,7 @@ export async function serve(ctx: Ctx, o: { retryMs?: number } = {}): Promise<Run
   // Your own AI plans, from the app (Phase 4 M1).
   service.subscriptions = new Subscriptions(ctx, service);
   const wanted = ctx.env.COVO_PORT !== undefined ? Number(ctx.env.COVO_PORT) : API_PORT;
-  const gate = new Gate(apiToken(ctx.home), wanted, ctx.now);
+  const gate = new Gate(apiToken(ctx.home), wanted, ctx.now, sessionsPath(ctx.home));
   const refusals = new RefusalLog((detail) => {
     const db = openDb(covoPaths(ctx.home).db);
     try {

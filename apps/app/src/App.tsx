@@ -13,7 +13,7 @@ import { RoutinesPage } from "./components/Routines.tsx";
 import { SettingsWindow } from "./components/Settings.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { type Data, hashFor, type LiveStep, MAIN_BOT, type View, viewFromHash } from "./model.ts";
-import { inMacApp, reportDragRegions, reportTheme } from "./shell.ts";
+import { inMacApp, loadedBuild, reportDragRegions, reportTheme, requestSignIn } from "./shell.ts";
 import { ThemeContext, useThemeState } from "./theme.ts";
 
 async function load(): Promise<Data> {
@@ -38,6 +38,8 @@ export function App() {
   const [data, setData] = useState<Data | null>(null);
   const [view, setView] = useState<View>(() => viewFromHash(location.hash) ?? { name: "bot", id: "" });
   const [sidebar, setSidebar] = useState(true);
+  /** Covo was updated while this page was open: reload to get the new version. */
+  const [updated, setUpdated] = useState(false);
   const [tick, setTick] = useState(0);
   // Steps of running tasks as they stream in, by run; and which run each service job is.
   const steps = useRef(new Map<string, LiveStep[]>());
@@ -59,11 +61,26 @@ export function App() {
       do {
         again.current = false;
         try {
-          setData(await load());
+          const d = await load();
+          // A newer version of the app is being served: reload into it, unless you're typing.
+          const mine = loadedBuild();
+          if (d.me.build && mine && d.me.build !== mine) {
+            const typing = document.activeElement?.matches("input, textarea, select") === true;
+            if (!typing) {
+              location.reload();
+              return;
+            }
+            setUpdated(true);
+          }
+          setData(d);
           setGate("ready");
           setTick((t) => t + 1);
         } catch (e) {
-          if (e instanceof ApiFail && e.status === 401) setGate((g) => (g === "expired" ? g : "signed-out"));
+          if (e instanceof ApiFail && e.status === 401) {
+            // In the Mac app, it signs the page in again by itself.
+            if (requestSignIn(location.hash || "#/bot/")) return;
+            setGate((g) => (g === "expired" ? g : "signed-out"));
+          }
           // Can't reach the service at all; any other error keeps what's on screen until the next update.
           else if (!(e instanceof ApiFail)) setGate("down");
         }
@@ -256,6 +273,14 @@ export function App() {
         <div className="frame-panel">
           {sidebar && <Sidebar data={data} view={sideView} go={go} />}
           <main className="main">
+            {updated && (
+              <div className="paused-banner t-body-s" role="status">
+                <span className="grow">Covo was updated. Reload to get the new version.</span>
+                <button type="button" className="link" onClick={() => location.reload()}>
+                  Reload
+                </button>
+              </div>
+            )}
             {data.pause.paused && (
               <div className="paused-banner t-body-s" role="status">
                 <span className="grow">

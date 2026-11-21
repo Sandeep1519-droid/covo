@@ -235,6 +235,44 @@ describe("a web page or another program can't use the service", () => {
   });
 });
 
+describe("staying signed in", () => {
+  test("a sign-in survives a restart of the service; the saved file can't sign anyone in", async () => {
+    await start();
+    const code = (
+      (await (await fetch("http://covod/pair-code", { unix: socketPath(home), method: "POST" })).json()) as {
+        code: string;
+      }
+    ).code;
+    const paired = await fetch(`${base}/api/pair`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: base },
+      body: JSON.stringify({ code }),
+    });
+    const cookie = (paired.headers.get("set-cookie") ?? "").split(";")[0] as string;
+    const sid = cookie.split("=")[1] as string;
+    await running?.close();
+    await start(); // Covo's service restarts (an update, the Mac restarting)
+    expect((await fetch(`${base}/api/bots`, { headers: { cookie } })).status).toBe(200);
+    const saved = readFileSync(join(home, "state/sessions.json"), "utf8");
+    expect(saved).not.toContain(sid);
+    expect(statSync(join(home, "state/sessions.json")).mode & 0o777).toBe(0o600);
+    // Signing out ends it for good, restart or not.
+    await fetch(`${base}/api/session`, { method: "DELETE", headers: { cookie, origin: base } });
+    await running?.close();
+    await start();
+    expect((await fetch(`${base}/api/bots`, { headers: { cookie } })).status).toBe(401);
+  });
+
+  test("the service says which app build it serves, so an open page can update itself", async () => {
+    writeFileSync(
+      join(root, "ui", "index.html"),
+      '<!doctype html><title>Covo</title><script type="module" crossorigin src="/ui/chunk-ab12cd34.js"></script>',
+    );
+    await start();
+    expect(await (await api("/me")).json()).toMatchObject({ build: "chunk-ab12cd34.js" });
+  });
+});
+
 describe("approvals can't be edited or replayed", () => {
   test("in the app: an answer for a different request, a second answer and a late one change nothing, and are logged", async () => {
     await start();

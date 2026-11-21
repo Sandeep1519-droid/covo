@@ -493,9 +493,10 @@ export async function chatgptModels(o: ChatGPTOptions): Promise<ChatGPTModel[]> 
     data?: { slug?: string; id?: string; display_name?: string; visibility?: string }[];
     models?: { slug?: string; id?: string; display_name?: string; visibility?: string }[];
   };
-  return (json.data ?? json.models ?? [])
-    .filter((m) => m.visibility === "list" && (m.slug ?? m.id))
-    .map((m) => ({ slug: (m.slug ?? m.id) as string, name: m.display_name ?? ((m.slug ?? m.id) as string) }));
+  const all = (json.data ?? json.models ?? []).filter((m) => m.slug ?? m.id);
+  // OpenAI marks the ones to offer with visibility "list"; a list without that field offers them all.
+  const shown = all.some((m) => m.visibility !== undefined) ? all.filter((m) => m.visibility === "list") : all;
+  return shown.map((m) => ({ slug: (m.slug ?? m.id) as string, name: m.display_name ?? ((m.slug ?? m.id) as string) }));
 }
 
 /** For tests and `covo doctor`: is a sign-in in progress or saved here at all? */

@@ -58,6 +58,8 @@ export type AvatarColor = keyof typeof AVATAR_COLORS;
 /** GET /api/me: who is using this Mac. */
 export interface ApiMe {
   name: string;
+  /** The app build the service serves now; an open page that runs another one reloads. */
+  build: string | null;
 }
 
 export interface ApiHealth {

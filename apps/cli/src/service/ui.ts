@@ -1,7 +1,7 @@
 // Serves the app (apps/app, Phase 3 M2) at /ui from its build folder. The page holds no data itself:
 // it signs in with the one-time code from `covo app` and then talks to /api like any other client.
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -68,4 +68,20 @@ export async function uiFile(dir: string, rel: string): Promise<Response> {
       "cache-control": HASHED.test(file) ? "public, max-age=31536000, immutable" : "no-store",
     },
   });
+}
+
+let built: { file: string; mtime: number; build: string | null } | undefined;
+
+/** The app build the service serves now ("chunk-ab12cd34.js"), from its index.html; null without one. */
+export function uiBuild(uiDir: string): string | null {
+  const file = join(uiDir, "index.html");
+  try {
+    const mtime = statSync(file).mtimeMs;
+    if (built?.file === file && built.mtime === mtime) return built.build;
+    const build = readFileSync(file, "utf8").match(/chunk-[a-z0-9]+\.js/)?.[0] ?? null;
+    built = { file, mtime, build };
+    return build;
+  } catch {
+    return null;
+  }
 }

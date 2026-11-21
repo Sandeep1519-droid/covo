@@ -83,6 +83,7 @@ import type { Ctx } from "../main.ts";
 import { PrepareError } from "../runner.ts";
 import { COOKIE, type Gate } from "./gate.ts";
 import type { Service, ServiceMessage } from "./server.ts";
+import { defaultUiDir, uiBuild } from "./ui.ts";
 
 // Covo's local API (Phase 3 M1): everything the command line does, as JSON, for the app and the
 // Mac app. Same engine functions, same activity log. Keys go in and never come out.
@@ -617,7 +618,8 @@ export async function handleApi(
         ...service.stats(),
       });
     }
-    if (m === "GET" && a === "me" && !id) return json({ name: userName() } satisfies ApiMe);
+    if (m === "GET" && a === "me" && !id)
+      return json({ name: userName(), build: uiBuild(ctx.env.COVO_UI_DIR ?? defaultUiDir()) } satisfies ApiMe);
     // A one-time sign-in code for the Mac app's window. Token only: a browser session can't mint more.
     if (m === "POST" && a === "pair-code" && !id) {
       if (by !== "token") throw new HttpError(403, "Only Covo's own programs can ask for a sign-in code.");

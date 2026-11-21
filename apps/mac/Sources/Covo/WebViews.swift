@@ -24,6 +24,9 @@ final class Bridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUI
             model?.setDragRegions(drag: rects(body["drag"]), keep: rects(body["keep"]))
         case "theme":
             if let choice = body["value"] as? String { model?.applyTheme(choice, from: view) }
+        case "signIn":
+            // The page lost its sign-in (it ran out, or Covo's service was reset): sign it in again.
+            if let route = body["route"] as? String, route.hasPrefix("#/") { model?.signInAgain(view, route: route) }
         default:
             break
         }

@@ -1,5 +1,5 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { covoPaths } from "@covo/core";
 
@@ -12,8 +12,12 @@ import { covoPaths } from "@covo/core";
 // Pairing: `covo app` asks for a one-time code over the private socket and opens the app with it
 // in the address fragment (never sent to any server). The app trades it for an HttpOnly,
 // SameSite=Strict cookie. Codes last 2 minutes and work once.
+// Sign-ins outlive a restart of the service: state/sessions.json (yours only) keeps a fingerprint
+// (SHA-256) of each session with its expiry, never the session itself, so the file can't sign anyone in.
 
 export const tokenPath = (home: string) => join(covoPaths(home).state, "api-token");
+export const sessionsPath = (home: string) => join(covoPaths(home).state, "sessions.json");
+const fingerprint = (sid: string) => createHash("sha256").update(sid).digest("base64url");
 export const COOKIE = "covo_session";
 const CODE_TTL_MS = 2 * 60_000;
 const SESSION_TTL_MS = 30 * 86_400_000;
@@ -61,7 +65,24 @@ export class Gate {
     private readonly token: string,
     private port: number,
     private readonly now: () => number = Date.now,
-  ) {}
+    /** Where sign-ins are kept between restarts; none in tests that don't need it. */
+    private readonly file?: string,
+  ) {
+    if (!file) return;
+    try {
+      const saved = JSON.parse(readFileSync(file, "utf8")) as { sessions?: [string, number][] };
+      for (const [f, exp] of saved.sessions ?? [])
+        if (typeof f === "string" && typeof exp === "number" && exp > now()) this.sessions.set(f, exp);
+    } catch {} // none yet, or unreadable: everyone signs in again
+  }
+
+  private save(): void {
+    if (!this.file) return;
+    mkdirSync(dirname(this.file), { recursive: true });
+    const tmp = `${this.file}.${process.pid}.tmp`;
+    writeFileSync(tmp, `${JSON.stringify({ sessions: [...this.sessions.entries()] })}\n`, { mode: 0o600 });
+    renameSync(tmp, this.file);
+  }
 
   setPort(port: number): void {
     this.port = port;
@@ -94,10 +115,11 @@ export class Gate {
     const auth = req.headers.get("authorization") ?? "";
     if (auth.startsWith("Bearer ") && same(auth.slice(7).trim(), this.token)) return { ok: true, by: "token" };
     const sid = cookieValue(req, COOKIE);
-    const exp = sid ? this.sessions.get(sid) : undefined;
+    const exp = sid ? this.sessions.get(fingerprint(sid)) : undefined;
     if (sid && exp !== undefined) {
       if (exp < this.now()) {
-        this.sessions.delete(sid);
+        this.sessions.delete(fingerprint(sid));
+        this.save();
         return {
           ok: false,
           status: 401,
@@ -135,13 +157,15 @@ export class Gate {
     this.codes.delete(code); // one use, right or wrong
     if (exp === undefined || exp < this.now()) return null;
     const sid = randomBytes(32).toString("base64url");
-    this.sessions.set(sid, this.now() + SESSION_TTL_MS);
+    for (const [f, e] of this.sessions) if (e < this.now()) this.sessions.delete(f);
+    this.sessions.set(fingerprint(sid), this.now() + SESSION_TTL_MS);
+    this.save();
     return `${COOKIE}=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000}`;
   }
 
   endSession(req: Request): void {
     const sid = cookieValue(req, COOKIE);
-    if (sid) this.sessions.delete(sid);
+    if (sid && this.sessions.delete(fingerprint(sid))) this.save();
   }
 }
 

@@ -137,6 +137,25 @@ final class CovoModel: ObservableObject {
         debugLog("panel: signed in")
     }
 
+    private var lastSignIn: [ObjectIdentifier: Date] = [:]
+
+    /// A page lost its sign-in: get a fresh one-time code with the token and reload it at `route`.
+    /// At most every 15 seconds per page, so a service that keeps refusing can't cause a loop.
+    func signInAgain(_ view: WKWebView?, route: String) {
+        guard let view else { return }
+        let key = ObjectIdentifier(view)
+        if let last = lastSignIn[key], Date().timeIntervalSince(last) < 15 { return }
+        lastSignIn[key] = Date()
+        Task {
+            guard let code = try? await api.pairCode() else {
+                await ensureService()
+                return
+            }
+            view.load(URLRequest(url: api.home.appURL(code: code, route: route)))
+            debugLog("signed in again at \(route)")
+        }
+    }
+
     /// Shows the main window at a screen of the app, signing it in if needed.
     func showWindow(route: String = "#/bot/") {
         let w = window ?? MainWindow(model: self)
