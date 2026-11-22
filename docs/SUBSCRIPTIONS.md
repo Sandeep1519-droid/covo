@@ -147,7 +147,8 @@ Sources, read 22 Nov 2026: [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk)
 - **Get and sign-in:** **Get** runs OpenAI's official installer. **Sign in** starts Codex's own Sign in with ChatGPT (`codex login`). Codex handles the sign-in and keeps it; Covo never reads it.
 - **Its own Codex folder:** Covo's Codex uses `~/Covo/engines/codex` instead of `~/.codex`. It never sees your own Codex settings, sign-in or history, and the `codex` you use in Terminal isn't affected. Covo tells Codex to keep its sign-in in that folder (`auth.json`) rather than the Keychain, so the sandbox needs no Keychain access.
 - **How tasks run:**
-  - The command is `codex exec --json --ephemeral --ignore-user-config --ignore-rules`, with approvals off and web search off.
+  - The command is `codex exec --json --ephemeral --ignore-user-config --ignore-rules`, with approvals, web search, ChatGPT apps, plugins and OpenAI's analytics all off.
+  - Codex checks OpenAI's certificates against the Mac's own list in `/etc/ssl/cert.pem` (`CODEX_CA_CERTIFICATE`), because its sandbox has no Keychain access.
   - It works on Covo's copy of your files, in Covo's sandbox.
   - Codex's own sandbox is off, because macOS can't put one sandbox inside another.
 - **Network limited to OpenAI:** Codex reads files by running commands, so unlike Claude Code in Covo it has a shell. Its network goes only through a small filter inside Covo, which lets it reach OpenAI's servers (`*.openai.com`, `*.chatgpt.com`, port 443) and nothing else. The sandbox blocks DNS and every other connection. So a bad instruction in a file can't send your files anywhere.

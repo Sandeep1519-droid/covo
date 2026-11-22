@@ -38,9 +38,22 @@ export function codexArgs(o: { ws: string; model?: string; config?: string[] }):
     'approval_policy="never"',
     "-c",
     'web_search="disabled"',
+    // No ChatGPT apps or plugins (their tools reach other services), and no analytics.
+    "-c",
+    "features.apps=false",
+    "-c",
+    "features.plugins=false",
+    "-c",
+    "analytics.enabled=false",
     ...(o.model ? ["--model", o.model] : []),
   ];
 }
+
+/**
+ * The Mac's own list of trusted certificate authorities, as a file. Codex otherwise reads them
+ * through the Keychain services, which its sandbox doesn't allow.
+ */
+export const CA_BUNDLE = "/etc/ssl/cert.pem";
 
 interface CodexItem {
   type?: string;
@@ -207,6 +220,7 @@ export class CodexEngine implements Engine {
         PATH: [...prog.path, ...SYSTEM_PATH].join(":"),
         TERM: "dumb",
         NO_COLOR: "1",
+        ...(existsSync(CA_BUNDLE) ? { CODEX_CA_CERTIFICATE: CA_BUNDLE } : {}),
         ...(this.o.user ? { USER: this.o.user, LOGNAME: this.o.user } : {}),
         ...(proxyPort ? proxyEnv(proxyPort) : {}),
       },

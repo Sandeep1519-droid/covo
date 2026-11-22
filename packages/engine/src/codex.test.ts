@@ -144,6 +144,8 @@ describe("reading Codex's output", () => {
     expect(a.join(" ")).toContain("--sandbox danger-full-access --cd /w");
     expect(a.join(" ")).toContain('approval_policy="never"');
     expect(a.join(" ")).toContain('web_search="disabled"');
+    for (const c of ["features.apps=false", "features.plugins=false", "analytics.enabled=false"])
+      expect(a).toContain(c);
     expect(a.slice(-2)).toEqual(["--model", "gpt-x"]);
   });
 });

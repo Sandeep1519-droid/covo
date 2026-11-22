@@ -158,6 +158,20 @@ function lineKeeper(onLine?: (line: string) => void) {
   };
 }
 
+/**
+ * Stops a program and everything it started (an installer's downloads, say). Installers and
+ * sign-ins run in their own process group for this.
+ */
+function stopAll(p: { pid: number; kill: (signal?: NodeJS.Signals) => void }, signal: NodeJS.Signals = "SIGTERM") {
+  try {
+    process.kill(-p.pid, signal);
+  } catch {
+    try {
+      p.kill(signal);
+    } catch {}
+  }
+}
+
 async function pump(stream: ReadableStream<Uint8Array>, push: (s: string) => void) {
   const dec = new TextDecoder();
   for await (const chunk of stream) push(dec.decode(chunk, { stream: true }));
@@ -204,9 +218,11 @@ export function startInstall(ctx: Ctx, info: EngineInfo, onLine?: (line: string)
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
+        // Its own process group, so Cancel stops its downloads too.
+        detached: true,
       });
       const p = proc;
-      const timer = setTimeout(() => p.kill("SIGKILL"), INSTALL_TIMEOUT_MS);
+      const timer = setTimeout(() => stopAll(p, "SIGKILL"), INSTALL_TIMEOUT_MS);
       const [code] = await Promise.all([
         p.exited,
         pump(p.stdout as ReadableStream<Uint8Array>, (s) => keep.push(s)),
@@ -232,7 +248,7 @@ export function startInstall(ctx: Ctx, info: EngineInfo, onLine?: (line: string)
     done,
     cancel: () => {
       cancelled = true;
-      proc?.kill();
+      if (proc) stopAll(proc);
     },
   };
 }
@@ -309,7 +325,7 @@ export function startSignIn(ctx: Ctx, info: EngineInfo, binary: string): SetupJo
       terminal: { cols: 4000, rows: 50, data: (t, d) => onText(dec.decode(d, { stream: true }), (k) => t.write(k)) },
     });
   } else {
-    proc = Bun.spawn(argv, { env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+    proc = Bun.spawn(argv, { env, stdin: "ignore", stdout: "pipe", stderr: "pipe", detached: true });
     pumps = Promise.all([
       pump(proc.stdout as ReadableStream<Uint8Array>, (s) => onText(s)),
       pump(proc.stderr as ReadableStream<Uint8Array>, (s) => onText(s)),
@@ -319,7 +335,7 @@ export function startSignIn(ctx: Ctx, info: EngineInfo, binary: string): SetupJo
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    proc.kill();
+    stopAll(proc);
   }, SIGN_IN_TIMEOUT_MS);
   const done = (async () => {
     const code = await proc.exited;
@@ -341,7 +357,7 @@ export function startSignIn(ctx: Ctx, info: EngineInfo, binary: string): SetupJo
     done,
     cancel: () => {
       cancelled = true;
-      proc.kill();
+      stopAll(proc);
     },
   };
 }
