@@ -5,4 +5,4 @@ export { canonicalJson, sha256Hex } from "./json.ts";
 export type { CovoPaths } from "./paths.ts";
 export { covoHome, covoPaths, tildify } from "./paths.ts";
 
-export const VERSION = "0.0.1";
+export const VERSION = "1.0.0";

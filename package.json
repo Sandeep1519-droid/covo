@@ -1,6 +1,6 @@
 {
   "name": "covo",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
   "description": "Open-source AI coworkers that run safely on your own Mac.",
   "license": "Apache-2.0",

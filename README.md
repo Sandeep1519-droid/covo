@@ -3,6 +3,7 @@
 **AI coworkers that run on your own Mac, safe by design.** Bots do real work on your files with the AI you already have: your ChatGPT or Claude plan, an API key, or a free local model. Every task runs on an instant copy of your files inside the macOS sandbox. One click undoes it, a planted instruction can't take a bot over, and an activity log that can't be quietly edited records everything.
 
 [![CI](https://github.com/Sandeep1519-droid/covo/actions/workflows/ci.yml/badge.svg)](https://github.com/Sandeep1519-droid/covo/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Sandeep1519-droid/covo)](https://github.com/Sandeep1519-droid/covo/releases)
 ![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon-black)
 ![Bun](https://img.shields.io/badge/Bun-1.4-f9f1e1)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
@@ -143,7 +144,7 @@ The Mac app (`bun run mac:build`, then open `apps/mac/build/Covo.app`) puts Covo
 | [3](docs/PHASE3.md) | Background service, the chat app, the Mac menu bar app, phone approvals, routines, the daily summary                                                                                    | Done        |
 | [4](docs/PHASE4.md) | Your plans in the app (Codex, Claude Code, ChatGPT), the Library and the demo. Next: Mail and Calendar, MCP connections, a browser, memory, skills, more chat apps, one-command install | In progress |
 
-The full design is in [docs/BLUEPRINT.md](docs/BLUEPRINT.md), and the subscription terms we checked are in [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md). To record a demo of your own, follow [docs/DEMO.md](docs/DEMO.md).
+The full design is in [docs/BLUEPRINT.md](docs/BLUEPRINT.md), and the subscription terms we checked are in [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md). To record a demo of your own, follow [docs/DEMO.md](docs/DEMO.md). [CHANGELOG.md](CHANGELOG.md) lists what's in each release.
 
 ## Development
 
