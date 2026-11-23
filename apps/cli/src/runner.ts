@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { tildify } from "@covo/core";
 import {
   type Bot,
   type Engine,
@@ -137,9 +138,9 @@ export async function prepareRun(ctx: Ctx, req: RunRequest): Promise<Prepared> {
   return {
     header: {
       ...(bot ? { bot: { name: bot.name, level: bot.level } } : {}),
-      using: first.engine ? first.cfg.label : `${first.cfg.model} via ${first.cfg.label}`,
+      using: first.engine ? first.cfg.label : (ctx.provider?.label ?? `${first.cfg.model} via ${first.cfg.label}`),
       fallbacks: entries.slice(1).map((e) => e.label),
-      local: first.cfg.local,
+      local: ctx.provider?.label ? false : first.cfg.local,
       skipped,
       notes: cap.notes,
     },
@@ -162,6 +163,22 @@ export async function prepareRun(ctx: Ctx, req: RunRequest): Promise<Prepared> {
 }
 
 const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
+
+/**
+ * A step's target in a fixed width. A path keeps its end; in a command, long paths keep their last
+ * parts ("cat …/you/.ssh/id_ed25519"). Paths in your home folder start with ~.
+ */
+export function target(t: string, n = 44): string {
+  const shorten = (path: string) => {
+    const parts = tildify(path).split("/");
+    return parts.length > 5 ? `…/${parts.slice(-3).join("/")}` : parts.join("/");
+  };
+  if (/^[/~][^\s]*$/.test(t)) return pad(shorten(t), n);
+  return pad(
+    t.replace(/(^|[\s=@'"])(\/[^\s'"]+)/g, (_m, pre: string, path: string) => `${pre}${shorten(path)}`),
+    n,
+  );
+}
 
 /** Lines printed before the run starts. */
 export function headerLines(h: RunHeader): string[] {
@@ -189,7 +206,7 @@ export function eventPrinter(
     } else if (e.type === "tool") {
       const mark = e.blocked ? "⛔" : e.ok ? " " : "✗";
       print(
-        `  ${String(e.seq).padStart(2)} ${mark} ${pad(e.name, 12)} ${pad(e.target || "", 40)} ${e.blocked ? `blocked (${e.blocked === "path" ? "outside the workspace" : "by the sandbox"})` : e.label}\n`,
+        `  ${String(e.seq).padStart(2)} ${mark} ${pad(e.name, 12)} ${target(e.target || "")} ${e.blocked ? `blocked (${e.blocked === "path" ? "outside the workspace" : "by the sandbox"})` : e.label}\n`,
       );
     } else if (e.type === "approval") {
       print(`\n  ⏸ ${e.summary}\n`);

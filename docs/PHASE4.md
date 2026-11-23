@@ -122,3 +122,26 @@ Pass criteria:
 5. **Chat apps:** Slack, Discord, and iMessage as experimental (recommended). WhatsApp waits for a free official route for personal accounts, because its unofficial bridges can get your number banned.
 6. **Install:** free releases with a one-time Open Anyway step (recommended), *or* pay Apple $99 a year to notarize the app later.
 7. **New memories:** saved with Undo at the Automatic level (recommended), *or* always asked.
+
+## Update, 23 November 2026: ready to demo
+
+Before the rest of Phase 4, Covo got what it needs to be shown, from what's already built:
+
+- **`covo demo`** (`bun run demo`): Covo in about a minute, on any Mac, with no account and nothing touched. In a throwaway folder, with a stand-in model, it shows five things:
+  - a task kept on a copy;
+  - Undo;
+  - an email whose planted instructions try to read an SSH key, raise the bot's limit and upload the key (all 4 attempts stopped);
+  - a spending pause;
+  - `covo audit verify`.
+- **`covo demo --app`** opens the same results in the app until Ctrl+C. **`covo demo files`** puts the demo's sample files in your own workspace, so you can show Covo with your own AI.
+- **The Library** replaces its placeholder. It has three tabs:
+  - **Activity:** the activity log in plain words, with a tamper-check banner and a *Stopped by Covo* filter;
+  - **Tasks;**
+  - **Files.**
+- **In the chat,** a task with stopped steps says so, with a link to the steps.
+- **Run output** shortens long paths (`cat …/you/.ssh/id_ed25519`), and the stand-in model is named for what it is.
+- **Presentation:**
+  - a new README with Retina screenshots (`scripts/snap.swift` renders the demo off screen with WebKit);
+  - [ARCHITECTURE.md](ARCHITECTURE.md);
+  - [DEMO.md](DEMO.md), a 3-minute recording script.
+- **Verified:** 340 tests (4 new: the demo, demo files, the Library feed with tamper detection, and workspace files). Checked in the app on the demo's data.

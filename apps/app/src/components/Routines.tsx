@@ -824,7 +824,6 @@ export function RoutinesPage({ data, refresh, go }: { data: Data; refresh: () =>
           {error}
         </p>
       )}
-      <p className="t-body-s muted">Skills and connections arrive here later.</p>
       {editing !== undefined && (
         <RoutineEditor
           data={data}

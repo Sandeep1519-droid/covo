@@ -5,6 +5,7 @@ import type { TelegramApi } from "@covo/phone";
 import type { SecretStore, SystemInfo } from "@covo/platform";
 import { auditCommand } from "./commands/audit.ts";
 import { botsCommand } from "./commands/bots.ts";
+import { demoCommand } from "./commands/demo.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { initCommand } from "./commands/init.ts";
 import { modelsCommand } from "./commands/models.ts";
@@ -25,7 +26,9 @@ const HELP = `covo ${VERSION}: Covo command line
 Usage:
   covo <command> [options]
 
-Commands (Phase 1):
+Commands:
+  demo [--app]        See Covo in about a minute: no account, nothing on your Mac touched
+  demo files          Put the demo's sample files in your workspace, to show Covo with your own AI
   init                Create ~/Covo and the default workspace
   audit verify        Check the activity log for tampering
   doctor [check]      Check instant copies, the sandbox and the model
@@ -145,6 +148,7 @@ export async function main(
   if (!cmd || cmd === "-h" || cmd === "--help" || cmd === "help") return { code: 0, out: HELP };
   if (cmd === "-v" || cmd === "--version") return { code: 0, out: `${VERSION}\n` };
   if (cmd === "init") return initCommand(ctx);
+  if (cmd === "demo") return demoCommand(ctx, rest, main);
   if (cmd === "audit") return auditCommand(ctx, rest);
   if (cmd === "doctor") return doctorCommand(ctx, rest);
   if (cmd === "run") return runCommand(ctx, rest);

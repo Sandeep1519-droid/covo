@@ -16,6 +16,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p apps/app/tsconfig.json",
     "check": "bun run lint && bun run typecheck && bun test",
     "covo": "bun apps/cli/src/index.ts",
+    "demo": "bun apps/cli/src/index.ts demo",
+    "setup": "bun apps/app/build.ts && bun apps/cli/src/index.ts init",
     "app:build": "bun apps/app/build.ts",
     "app:dev": "bun apps/app/build.ts --watch",
     "mac:build": "bash apps/mac/build.sh",

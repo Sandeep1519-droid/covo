@@ -189,6 +189,40 @@ export interface ApiSubscriptions {
   engines: ApiEngine[];
 }
 
+/** GET /api/activity: the activity log in plain words, with its tamper check (Library). */
+export interface ApiActivity {
+  /** The hash chain is intact: no entry was changed, removed or reordered. */
+  verified: boolean;
+  count: number;
+  head: { seq: number; hash: string } | null;
+  /** Where the check failed, if it did. */
+  problemAt: number | null;
+  /** Among the entries looked at: what Covo stopped or refused. */
+  blockedRecent: number;
+  entries: ApiActivityEntry[];
+}
+
+export interface ApiActivityEntry {
+  seq: number;
+  ts: number;
+  runId: string | null;
+  action: string;
+  /** "You", "Covo" or the bot's name. */
+  who: string;
+  text: string;
+  /** Something Covo stopped: a sandbox block, a refused request, a spending pause… */
+  blocked: boolean;
+  kind: string;
+}
+
+/** GET /api/files: a file in one of your workspaces. */
+export interface ApiFile {
+  workspace: string;
+  path: string;
+  bytes: number;
+  modifiedAt: number;
+}
+
 /** A program that uses your plan (Claude Code, Codex): get it, sign in, connect. */
 export interface ApiEngine {
   id: string;
@@ -264,6 +298,8 @@ export interface ApiRun {
   /** The routine it ran for (M6). */
   routineId?: string | null;
   routineName?: string | null;
+  /** Steps Covo stopped: outside the workspace, or not allowed by the sandbox. */
+  blockedSteps?: number;
 }
 
 /** GET /api/routines (M6): a bot's task on a schedule. */

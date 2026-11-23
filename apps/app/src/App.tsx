@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiFail, api, listen, pair } from "./api.ts";
 import { BotChat } from "./components/BotChat.tsx";
 import { Icon } from "./components/Icon.tsx";
+import { Library } from "./components/Library.tsx";
 import { MenuBar } from "./components/MenuBar.tsx";
 import { NeedsYou, needsYou } from "./components/NeedsYou.tsx";
 import { NewBot } from "./components/NewBot.tsx";
@@ -236,8 +237,7 @@ export function App() {
   else if (screen.name === "review")
     main = <Review data={data} runId={screen.runId} tick={tick} go={go} refresh={refresh} />;
   else if (screen.name === "new-bot") main = <NewBot data={data} go={go} refresh={refresh} />;
-  else if (screen.name === "library")
-    main = <Later title="Library" what="Your files, memory and the activity log will live here. For now: covo log." />;
+  else if (screen.name === "library") main = <Library data={data} go={go} />;
   else if (screen.name === "more") main = <RoutinesPage data={data} refresh={refresh} go={go} />;
   else if (bot) main = <BotChat data={data} bot={bot} tick={tick} steps={stepsOf} refresh={refresh} go={go} />;
   else main = <Later title="Covo" what="No bots yet. Make one with New bot." />;

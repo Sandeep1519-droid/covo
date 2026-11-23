@@ -1428,3 +1428,62 @@ body:has(.menubar) {
   flex-direction: column;
   gap: 4px;
 }
+
+/* Library: the activity log with its tamper check, tasks and files */
+.lib-proof {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-status-success-subtle);
+}
+.lib-proof.bad {
+  background: var(--color-status-danger-subtle);
+}
+.chip {
+  flex: none;
+  padding: var(--space-4) var(--space-12);
+  border-radius: 999px;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.chip:hover {
+  background: var(--color-bg-hover);
+}
+.chip.on {
+  color: var(--color-text-primary);
+  border-color: var(--color-status-danger);
+}
+.lib-day {
+  padding-top: var(--space-16);
+  padding-bottom: var(--space-4);
+}
+.lib-row {
+  align-items: flex-start;
+}
+.lib-time {
+  flex: none;
+  width: 44px;
+  padding-top: 2px;
+}
+.lib-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lib-row.stopped .lib-text {
+  color: var(--color-status-danger);
+}
+
+/* A task's stopped steps, in the chat */
+.stopped-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-xl);
+  background: var(--color-status-danger-subtle);
+  border: 1px solid var(--color-border-subtle);
+}

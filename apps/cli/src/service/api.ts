@@ -81,6 +81,7 @@ import { findProgram } from "../commands/engines.ts";
 import { currentCapacity, readSystem } from "../commands/profile.ts";
 import type { Ctx } from "../main.ts";
 import { PrepareError } from "../runner.ts";
+import { activity, workspaceFiles } from "./activity.ts";
 import { COOKIE, type Gate } from "./gate.ts";
 import type { Service, ServiceMessage } from "./server.ts";
 import { defaultUiDir, uiBuild } from "./ui.ts";
@@ -154,10 +155,12 @@ type RunRow = {
   finished_at: number | null;
   routine_id: string | null;
   routine_name: string | null;
+  blocked_steps: number;
 };
 const RUN_SELECT = `SELECT r.id, r.state, r.goal, r.agent_id, a.name AS bot_name, r.model, r.trigger, r.cost_usd,
   r.tokens_in, r.tokens_out, r.summary, r.error, r.created_at, r.started_at, r.finished_at,
-  r.routine_id, t.name AS routine_name
+  r.routine_id, t.name AS routine_name,
+  (SELECT count(*) FROM run_steps s WHERE s.run_id = r.id AND s.decision = 'deny') AS blocked_steps
   FROM runs r LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN routines t ON t.id = r.routine_id`;
 const toRun = (r: RunRow): ApiRun => ({
   id: r.id,
@@ -177,6 +180,7 @@ const toRun = (r: RunRow): ApiRun => ({
   finishedAt: r.finished_at,
   routineId: r.routine_id,
   routineName: r.routine_name,
+  blockedSteps: r.blocked_steps,
 });
 
 function findRunId(db: Database, arg: string): string {
@@ -619,7 +623,10 @@ export async function handleApi(
       });
     }
     if (m === "GET" && a === "me" && !id)
-      return json({ name: userName(), build: uiBuild(ctx.env.COVO_UI_DIR ?? defaultUiDir()) } satisfies ApiMe);
+      return json({
+        name: ctx.env.COVO_DISPLAY_NAME || userName(),
+        build: uiBuild(ctx.env.COVO_UI_DIR ?? defaultUiDir()),
+      } satisfies ApiMe);
     // A one-time sign-in code for the Mac app's window. Token only: a browser session can't mint more.
     if (m === "POST" && a === "pair-code" && !id) {
       if (by !== "token") throw new HttpError(403, "Only Covo's own programs can ask for a sign-in code.");
@@ -885,6 +892,13 @@ export async function handleApi(
     }
     if (a === "profile" && m === "GET") return json(profile(ctx));
     if (a === "audit" && id === "verify" && m === "GET") return json(withDb(ctx, (db) => verifyAudit(db)));
+    // The Library: the activity log in plain words, and your workspaces' files.
+    if (a === "activity" && m === "GET" && !id) {
+      const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 150) || 150));
+      const blocked = url.searchParams.get("blocked") === "1";
+      return json(withDb(ctx, (db) => activity(db, { limit, blocked })));
+    }
+    if (a === "files" && m === "GET" && !id) return json(workspaceFiles(covoPaths(ctx.home).workspaces));
     if (a === "doctor" && m === "GET") {
       const r = await doctorCommand(ctx, []);
       return json({ ok: r.code === 0, text: r.out });

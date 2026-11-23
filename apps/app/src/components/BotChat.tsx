@@ -498,6 +498,7 @@ function BotReply({
       body = (
         <>
           <p className="t-body-m">{summary}</p>
+          {(run.blockedSteps ?? 0) > 0 && <StoppedSteps run={run} go={go} />}
           {changes && <ChangesCard run={run} changes={changes} go={go} onDone={refresh} />}
         </>
       );
@@ -511,6 +512,28 @@ function BotReply({
         {head(pill)}
         {body}
       </div>
+    </div>
+  );
+}
+
+/** Steps Covo stopped in this task: the proof that a planted instruction went nowhere. */
+function StoppedSteps({ run, go }: { run: ApiRun; go: (v: View) => void }) {
+  const n = run.blockedSteps ?? 0;
+  return (
+    <div className="stopped-note" role="status">
+      <Icon name="run-failed" />
+      <span className="file-text grow">
+        <span className="t-body-m-strong">
+          Covo stopped {n} step{n === 1 ? "" : "s"} in this task
+        </span>
+        <span className="t-body-s secondary">
+          They reached outside the bot's copy of your files, or did something the sandbox doesn't allow, so they did
+          nothing.
+        </span>
+      </span>
+      <button type="button" className="link t-body-s" onClick={() => go({ name: "review", runId: run.id })}>
+        See the steps
+      </button>
     </div>
   );
 }

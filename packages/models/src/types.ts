@@ -95,6 +95,8 @@ export type ModelEvent =
 export interface ModelProvider {
   /** e.g. "ollama:qwen3:4b" */
   readonly id: string;
+  /** How to name it in messages, when it isn't one of your saved models (the demo's stand-in). */
+  readonly label?: string;
   chat(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ModelEvent>;
 }
 
