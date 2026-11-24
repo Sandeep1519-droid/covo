@@ -117,6 +117,10 @@ export interface SetupJob {
   step: () => string | null;
   /** The sign-in page the program printed (for when your browser doesn't open). */
   url: () => string | null;
+  /** The program asks for the code its sign-in page shows (when the page can't hand it over itself). */
+  wantsCode?: () => boolean;
+  /** Types that code into the program's own prompt. */
+  answer?: (text: string) => void;
   done: Promise<void>;
   cancel: () => void;
 }
@@ -354,6 +358,10 @@ export function startSignIn(ctx: Ctx, info: EngineInfo, binary: string): SetupJo
   return {
     step: () => step,
     url: () => link,
+    wantsCode: () => info.signInNeedsTerminal && /paste (the )?code/i.test(plain(seen)),
+    answer: (text: string) => {
+      proc.terminal?.write(`${text}\r`);
+    },
     done,
     cancel: () => {
       cancelled = true;
@@ -379,4 +387,50 @@ export async function signOutEngine(ctx: Ctx, info: EngineInfo): Promise<void> {
   const timer = setTimeout(() => p.kill(), 30_000);
   await p.exited;
   clearTimeout(timer);
+}
+
+/** A model a program offers: what to pass it, and its name. */
+export interface EngineModel {
+  slug: string;
+  name: string;
+}
+
+const catalog = new Map<string, { at: number; list: EngineModel[] }>();
+const ALIAS: Record<string, string> = { sonnet: "Sonnet", opus: "Opus", haiku: "Haiku", fable: "Fable" };
+
+/**
+ * The models a program offers. Codex: its own catalog for your account (`codex debug models`, the
+ * ones it lists), cached for 10 minutes. Claude Code: its model aliases.
+ */
+export async function engineModels(ctx: Ctx, info: EngineInfo): Promise<EngineModel[]> {
+  if (info.id !== "codex")
+    return info.models.filter((m) => m !== "default").map((m) => ({ slug: m, name: ALIAS[m] ?? m }));
+  const binary = findProgram(ctx, info.command, info.knownPaths);
+  if (!binary) return [];
+  const hit = catalog.get(binary);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.list;
+  let list: EngineModel[] = [];
+  try {
+    const p = Bun.spawn([binary, "debug", "models", ...(info.configArgs ?? [])], {
+      env: signInEnv(ctx, info, binary),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const timer = setTimeout(() => p.kill(), 20_000);
+    const out = await new Response(p.stdout).text();
+    await p.exited;
+    clearTimeout(timer);
+    const j = JSON.parse(out) as {
+      models?: { slug?: string; display_name?: string; visibility?: string; priority?: number }[];
+    };
+    list = (j.models ?? [])
+      .filter((m) => typeof m.slug === "string" && (m.visibility ?? "list") === "list")
+      .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
+      .map((m) => ({ slug: m.slug as string, name: m.display_name ?? (m.slug as string) }));
+  } catch {
+    list = [];
+  }
+  catalog.set(binary, { at: Date.now(), list });
+  return list;
 }

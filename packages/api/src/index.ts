@@ -189,6 +189,19 @@ export interface ApiSubscriptions {
   engines: ApiEngine[];
 }
 
+/** GET /api/model-choices: every model you can pick for a message, grouped by where it comes from. */
+export interface ApiModelGroup {
+  /** The saved model's name, or "local" for the models on this Mac. */
+  connection: string;
+  label: string;
+  /** "chatgpt", "codex" or "claude-code" for your plans; null for keys and local models. */
+  subscription: string | null;
+  /** Bots use this one when they don't say otherwise. */
+  isDefault: boolean;
+  /** What a task runs with ("codex:gpt-6-luna", "local:qwen3.5:4b"), and the model's name. */
+  options: { value: string; label: string; current: boolean }[];
+}
+
 /** GET /api/activity: the activity log in plain words, with its tamper check (Library). */
 export interface ApiActivity {
   /** The hash chain is intact: no entry was changed, removed or reordered. */
@@ -249,6 +262,8 @@ export interface ApiEngine {
   signingIn: boolean;
   step: string | null;
   url: string | null;
+  /** The program waits for the code its sign-in page shows: paste it in the app. */
+  codePrompt: boolean;
   /** Why the last Get or Sign in didn't finish. */
   error: string | null;
   /** What connecting means, in plain words (shown before you agree). */

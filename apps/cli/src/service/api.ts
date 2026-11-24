@@ -70,6 +70,7 @@ import {
   PRESETS,
   presetById,
   removeConnection,
+  saveSettings,
   setDefault,
   setLimits,
   setRoutineSettings,
@@ -78,11 +79,13 @@ import { SecretError, secrets } from "@covo/platform";
 import { UndoError } from "@covo/sandbox";
 import { doctorCommand } from "../commands/doctor.ts";
 import { findProgram } from "../commands/engines.ts";
+import { NOT_CHAT } from "../commands/models.ts";
 import { currentCapacity, readSystem } from "../commands/profile.ts";
 import type { Ctx } from "../main.ts";
 import { PrepareError } from "../runner.ts";
 import { activity, workspaceFiles } from "./activity.ts";
 import { COOKIE, type Gate } from "./gate.ts";
+import { modelChoices } from "./model-choices.ts";
 import type { Service, ServiceMessage } from "./server.ts";
 import { defaultUiDir, uiBuild } from "./ui.ts";
 
@@ -741,6 +744,25 @@ export async function handleApi(
         await removeConnection(ctx.home, ctx.secrets ?? secrets(), id);
         return json(models(ctx));
       }
+      // Which of its models a saved model uses by default ("gpt-6-luna" for Codex, "opus" for Claude Code).
+      if (m === "PUT" && id && !action) {
+        const b = await body<{ model?: unknown }>(req);
+        if (typeof b.model !== "string" || !/^[\w.:/@+-]{1,120}$/.test(b.model))
+          throw new HttpError(400, "Choose a model.");
+        const st = loadSettings(ctx.home);
+        const c = st.connections.find((x) => x.name === id);
+        if (!c) throw new HttpError(404, `There's no saved model called "${id}".`);
+        c.model = b.model;
+        saveSettings(ctx.home, st);
+        service.announce({ type: "changed", what: "models" });
+        return json(models(ctx));
+      }
+    }
+
+    // Every model you can pick for a message: your plans' models, your keys, the models on this Mac.
+    if (a === "model-choices" && m === "GET" && !id) {
+      const subs = service.subscriptions;
+      return json(await modelChoices(ctx, () => (subs ? subs.chatgptModelList() : Promise.resolve([]))));
     }
 
     // Your own AI plans (Phase 4 M1): Sign in with ChatGPT, and the programs that use your plan.
@@ -763,6 +785,7 @@ export async function handleApi(
         if (m === "POST" && action === "install") subs.install(id, who);
         else if (m === "POST" && action === "sign-in") subs.startSignIn(id, who);
         else if (m === "POST" && action === "cancel") subs.cancel(id);
+        else if (m === "POST" && action === "code") subs.sendCode(id, (await body<{ code?: unknown }>(req)).code);
         else if (m === "POST" && action === "check") await subs.check(id);
         else if (m === "POST" && !action) await subs.connect(id, await body(req), who);
         else if (m === "DELETE" && !action) await subs.disconnect(id, who);
@@ -772,6 +795,37 @@ export async function handleApi(
       }
     }
 
+    // The models a service offers, read with the key you're adding (it isn't kept unless you save).
+    if (a === "providers" && id && action === "models" && m === "POST") {
+      const preset = presetById(id);
+      if (!preset) throw new HttpError(404, `Unknown service "${id}".`);
+      const b = await body<{ key?: unknown; baseUrl?: unknown }>(req);
+      const key = typeof b.key === "string" && b.key.trim() ? b.key.trim() : undefined;
+      if (!preset.local && !key) throw new HttpError(400, `A ${preset.label} key is needed.`);
+      const probe = {
+        ...modelConfig(
+          { COVO_PROVIDER: preset.id, COVO_MODEL_BASE_URL: typeof b.baseUrl === "string" ? b.baseUrl : undefined },
+          { requireModel: false },
+        ),
+        ...(key ? { apiKey: key, keySource: "the app" } : {}),
+      };
+      let list: string[];
+      try {
+        list = await (ctx.listModels ?? listModelsFor)(probe, AbortSignal.timeout(15_000));
+      } catch (e) {
+        const msg = (e as Error).message;
+        throw new HttpError(
+          422,
+          /\b(401|403)\b/.test(msg)
+            ? `${preset.label} didn't accept that key. Check you copied all of it.`
+            : `Couldn't read ${preset.label}'s models: ${msg}`,
+        );
+      }
+      const chat = [...new Set(list)].filter((x) => !NOT_CHAT.test(x));
+      // Your preset's suggestions first, then the rest by name.
+      const first = preset.models.filter((x) => chat.includes(x));
+      return json({ models: [...first, ...chat.filter((x) => !first.includes(x)).sort()].slice(0, 500) });
+    }
     if (a === "providers" && m === "GET" && !id) {
       return json(
         PRESETS.map(

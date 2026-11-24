@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ApiEngine, ApiModel, ApiSubscriptions } from "@covo/api";
+import type { ApiEngine, ApiModel, ApiModelGroup, ApiSubscriptions } from "@covo/api";
 import { covoPaths } from "@covo/core";
 import { openDb } from "@covo/db";
 import { browse, fakeClock, fakeOpenAI } from "@covo/models/fake-openai";
@@ -234,6 +234,7 @@ case "$1" in
     echo "{}" > "$CODEX_HOME/auth.json"
     echo "Successfully logged in" >&2 ;;
   logout) rm -f "$CODEX_HOME/auth.json"; echo "Successfully logged out" >&2 ;;
+  debug) echo '{"models":[{"slug":"gpt-hidden","display_name":"Hidden","visibility":"hide","priority":1},{"slug":"gpt-b","display_name":"GPT-B","visibility":"list","priority":3},{"slug":"gpt-a","display_name":"GPT-A","visibility":"list","priority":2}]}' ;;
 esac
 EOS
 chmod +x "$HOME/.local/bin/codex"
@@ -289,6 +290,17 @@ echo "==> Codex CLI installed"
         expect.objectContaining({ name: "codex", subscription: "codex", engine: true }),
       ]);
 
+      // Its models, from Codex's own catalog (only the ones it lists, in its order), to pick per
+      // message or as its usual one.
+      const groups = (await (await api("/model-choices")).json()) as ApiModelGroup[];
+      expect(groups[0]).toMatchObject({ connection: "codex", subscription: "codex", isDefault: true });
+      expect(groups[0]?.options.map((o) => o.value)).toEqual(["codex", "codex:gpt-a", "codex:gpt-b"]);
+      expect((await api("/models/codex", { method: "PUT", body: JSON.stringify({ model: "gpt-b" }) })).status).toBe(
+        200,
+      );
+      const again = (await (await api("/model-choices")).json()) as ApiModelGroup[];
+      expect(again[0]?.options.find((o) => o.current)?.value).toBe("codex:gpt-b");
+
       s = (await (await api("/subscriptions/codex", { method: "DELETE" })).json()) as ApiSubscriptions;
       expect(row(s, "codex").connected).toBe(false);
       expect(existsSync(join(codexHome, "auth.json"))).toBe(false);
@@ -331,5 +343,82 @@ echo "==> Codex CLI installed"
     } finally {
       srv.stop(true);
     }
+  });
+});
+
+describe("Claude Code's sign-in, from the app", () => {
+  /** A stand-in Claude Code whose sign-in page shows a code you paste back (its manual flow). */
+  const INSTALLER = `#!/bin/bash
+mkdir -p "$HOME/.local/bin"
+cat > "$HOME/.local/bin/claude" <<'EOS'
+#!/bin/bash
+case "$1 $2" in
+  "auth status")
+    if [ -f "$HOME/.claude/signed-in" ]; then echo '{"loggedIn":true,"authMethod":"claude.ai"}'; exit 0; fi
+    echo '{"loggedIn":false,"authMethod":"none"}'; exit 1 ;;
+  "auth login")
+    echo "Opening browser to sign in…"
+    echo "If the browser didn't open, visit: https://claude.ai/oauth/authorize?code=true&state=s1"
+    printf "Paste code here if prompted > "
+    read -r code
+    if [ "$code" = "abc123#state" ]; then mkdir -p "$HOME/.claude"; touch "$HOME/.claude/signed-in"; echo "Login successful."; exit 0; fi
+    echo "Invalid code"; exit 1 ;;
+esac
+EOS
+chmod +x "$HOME/.local/bin/claude"
+`;
+
+  test("the page's code, pasted in the app, goes to Claude Code's own prompt", async () => {
+    const srv = Bun.serve({ port: 0, fetch: () => new Response(INSTALLER) });
+    try {
+      await start({}, { COVO_INSTALLER_CLAUDE_CODE: `http://127.0.0.1:${srv.port}/install.sh`, PATH: "/usr/bin:/bin" });
+      await api("/subscriptions/claude-code/install", { method: "POST", body: "{}" });
+      await until(async () => row(await status(), "claude-code").signedIn === false, "Claude Code to be installed");
+      expect((await api("/subscriptions/claude-code/sign-in", { method: "POST", body: "{}" })).status).toBe(200);
+      const s = await until(async () => {
+        const x = await status();
+        return row(x, "claude-code").codePrompt ? x : false;
+      }, "the code prompt");
+      expect(row(s, "claude-code").url).toBe("https://claude.ai/oauth/authorize?code=true&state=s1");
+      // Not a code: refused before it reaches the program.
+      const bad = await api("/subscriptions/claude-code/code", {
+        method: "POST",
+        body: JSON.stringify({ code: "a b" }),
+      });
+      expect(bad.status).toBe(400);
+      const ok = await api("/subscriptions/claude-code/code", {
+        method: "POST",
+        body: JSON.stringify({ code: "abc123#state" }),
+      });
+      expect(ok.status).toBe(200);
+      const done = await until(async () => {
+        const x = await status();
+        return !row(x, "claude-code").signingIn && row(x, "claude-code").signedIn ? x : false;
+      }, "the sign-in to finish");
+      expect(row(done, "claude-code")).toMatchObject({ signedIn: true, method: "claude.ai", error: null });
+    } finally {
+      srv.stop(true);
+    }
+  });
+});
+
+describe("adding a key in the app", () => {
+  test("pasting a key lists the service's chat models; a refused key says so", async () => {
+    let refuse = false;
+    await start({
+      listModels: async () => {
+        if (refuse) throw new Error("GET /models answered 401");
+        return ["gpt-z", "text-embedding-3-large", "gpt-a", "whisper-1", "gpt-a"];
+      },
+    });
+    const r = await api("/providers/openai/models", { method: "POST", body: JSON.stringify({ key: "sk-test" }) });
+    expect(await r.json()).toEqual({ models: ["gpt-a", "gpt-z"] });
+    expect((await api("/providers/openai/models", { method: "POST", body: "{}" })).status).toBe(400);
+    refuse = true;
+    const no = await api("/providers/cerebras/models", { method: "POST", body: JSON.stringify({ key: "bad-key" }) });
+    expect(no.status).toBe(422);
+    expect(((await no.json()) as { error: string }).error).toBe(
+      "Cerebras didn't accept that key. Check you copied all of it.",
+    );
   });
 });

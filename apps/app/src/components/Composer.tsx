@@ -1,17 +1,26 @@
-import type { ApiModel } from "@covo/api";
+import type { ApiModelGroup } from "@covo/api";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.tsx";
 import { Pill } from "./Pill.tsx";
 import { LATER } from "./Sidebar.tsx";
+
+/** Where a model comes from, in a word or two, for the picker's button. */
+function shortSource(g: ApiModelGroup): string {
+  if (g.subscription === "codex") return "Codex";
+  if (g.subscription === "claude-code") return "Claude Code";
+  if (g.subscription === "chatgpt") return "ChatGPT plan";
+  if (g.connection === "local" || g.label.startsWith("On this Mac")) return "on this Mac";
+  return g.connection;
+}
 
 /** Figma "Composer": the message box at the bottom of every chat, with the section tab and model picker. */
 export function Composer({
   botName,
   section,
   level,
-  models,
-  model,
-  onModel,
+  groups,
+  pick,
+  onPick,
   text,
   onText,
   onSend,
@@ -20,9 +29,11 @@ export function Composer({
   botName: string;
   section: string;
   level: string;
-  models: ApiModel[];
-  model: ApiModel | undefined;
-  onModel: (name: string) => void;
+  /** Every model you can pick, grouped by where it comes from (GET /api/model-choices). */
+  groups: ApiModelGroup[];
+  /** The picked model for the next message: its group and option. */
+  pick: { group: ApiModelGroup; option: ApiModelGroup["options"][number] } | undefined;
+  onPick: (value: string) => void;
   text: string;
   onText: (t: string) => void;
   onSend: () => void;
@@ -93,7 +104,7 @@ export function Composer({
           </span>
           <Pill label={level} dot={false} />
           <span className="grow" />
-          {model?.subscription === "chatgpt" && (
+          {pick?.group.subscription === "chatgpt" && (
             // OpenAI's rule for Sign in with ChatGPT: say it near the model picker, with a way to manage usage.
             <span className="plan-note t-caption muted">
               Using ChatGPT plan ·{" "}
@@ -109,12 +120,12 @@ export function Composer({
               aria-haspopup="listbox"
               aria-expanded={open}
               onClick={() => setOpen((o) => !o)}
-              disabled={models.length === 0}
+              disabled={groups.length === 0}
             >
-              {model ? (
+              {pick ? (
                 <>
-                  <span>{model.name}</span>
-                  <span className="muted">{model.engine ? "subscription" : model.model}</span>
+                  <span>{pick.option.label}</span>
+                  <span className="muted">{shortSource(pick.group)}</span>
                 </>
               ) : (
                 <>
@@ -125,25 +136,30 @@ export function Composer({
               <Icon name="chevron" />
             </button>
             {open && (
-              <div className="menu" role="listbox" aria-label="Model for this message">
-                {models.map((m) => (
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={m.name === model?.name}
-                    key={m.name}
-                    className="menu-item"
-                    onClick={() => {
-                      onModel(m.name);
-                      setOpen(false);
-                    }}
-                  >
-                    <span className="t-body-m">{m.name}</span>
-                    <span className="t-caption muted">
-                      {m.subscription === "chatgpt" ? "Your ChatGPT plan" : m.providerLabel} · {m.model}
-                      {m.isDefault ? " · default" : ""}
+              <div className="menu menu-wide" role="listbox" aria-label="Model for this message">
+                {groups.map((g) => (
+                  <fieldset key={g.connection} className="menu-group" aria-label={g.label}>
+                    <span className="menu-heading t-overline muted">
+                      {g.label}
+                      {g.isDefault ? " · default" : ""}
                     </span>
-                  </button>
+                    {g.options.map((o) => (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={o.value === pick?.option.value}
+                        key={o.value}
+                        className="menu-item menu-row"
+                        onClick={() => {
+                          onPick(o.value);
+                          setOpen(false);
+                        }}
+                      >
+                        <span className="t-body-m">{o.label}</span>
+                        {o.current && <span className="t-caption muted">its usual</span>}
+                      </button>
+                    ))}
+                  </fieldset>
                 ))}
               </div>
             )}

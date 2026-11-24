@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Pick any model, per message.** The picker lists every model you can use:
+  - Codex's models for your account (GPT-6-Luna, GPT-5.6-Terra, GPT-5.6-Luna…);
+  - Claude Code's (Sonnet, Opus, Haiku, Fable);
+  - your ChatGPT plan's;
+  - your keys';
+  - the models on your Mac.
+
+  In Settings → Your models, choose each one's usual model.
+- **Eight more services** for API keys: Cerebras, Together AI, Fireworks, Hugging Face, NVIDIA NIM, Moonshot (Kimi), Alibaba Qwen and SambaNova. Paste a key and the service's own model list appears, so you don't need to know model names.
+- **Codex can search the web** with its own tool, which runs on OpenAI's servers. Bots now answer questions like "what's the weather today".
+- **Claude Code's sign-in:** if the sign-in page shows a code instead of finishing by itself, paste it in the app and it goes to Claude Code's own prompt.
+
 ## 1.0.0 (23 November 2026)
 
 The first release: AI coworkers that run on your own Mac, safe by design. Try it in a minute with no account: `bun install && bun run demo`.

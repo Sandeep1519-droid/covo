@@ -36,8 +36,9 @@ export function codexArgs(o: { ws: string; model?: string; config?: string[] }):
     ...(o.config ?? []),
     "-c",
     'approval_policy="never"',
+    // Web search runs on OpenAI's servers (Codex's own tool), so the network filter is unchanged.
     "-c",
-    'web_search="disabled"',
+    'web_search="live"',
     // No ChatGPT apps or plugins (their tools reach other services), and no analytics.
     "-c",
     "features.apps=false",

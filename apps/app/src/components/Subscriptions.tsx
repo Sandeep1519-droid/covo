@@ -274,6 +274,33 @@ export function SubscriptionRows({
 }
 
 /** One program that uses your plan: Get → Sign in → Connect. */
+/** For a sign-in page that shows a code instead of finishing by itself: paste it here. */
+function CodeBox({ onSend }: { onSend: (code: string) => Promise<boolean> }) {
+  const [code, setCode] = useState("");
+  return (
+    <form
+      className="code-box"
+      onSubmit={(ev) => {
+        ev.preventDefault();
+        if (code.trim()) void onSend(code.trim()).then((ok) => ok && setCode(""));
+      }}
+    >
+      <input
+        className="input t-body-s"
+        placeholder="Page shows a code? Paste it here"
+        aria-label="Sign-in code from the page"
+        autoComplete="off"
+        spellCheck={false}
+        value={code}
+        onChange={(ev) => setCode(ev.target.value)}
+      />
+      <Button small type="submit" disabled={!code.trim()}>
+        Send
+      </Button>
+    </form>
+  );
+}
+
 function EngineRow({
   e,
   busy,
@@ -298,7 +325,8 @@ function EngineRow({
   else if (!e.path)
     line = `${e.maker === "OpenAI" ? "Works with every ChatGPT plan, Free included." : "For Claude Pro, Max or Ultra."} Covo gets it with ${e.maker}'s own installer (about ${e.downloadMb} MB).`;
   else if (e.signedIn === null) line = busy ? "Checking whether you're signed in…" : `Installed at ${tilde(e.path)}`;
-  else if (!e.signedIn) line = `Installed. Sign in with your ${plan} account.`;
+  else if (!e.signedIn)
+    line = `Installed. Sign in with your ${plan} account${e.maker === "OpenAI" ? " (any plan, Free included)" : " (Claude Pro, Max or Ultra)"}.`;
   else if (e.method === "api_key")
     line = `Signed in with an API key, which would bill that key, not your plan. Sign in with your ${plan} account instead.`;
   else line = `Signed in · ready to use your ${plan} plan`;
@@ -317,6 +345,7 @@ function EngineRow({
               Browser didn't open? Open {e.maker}'s sign-in page
             </a>
           )}
+          {e.signingIn && e.codePrompt && <CodeBox onSend={(code) => call(`${base}/code`, "POST", { code })} />}
         </span>
         {e.connected ? (
           <>

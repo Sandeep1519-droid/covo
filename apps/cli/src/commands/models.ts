@@ -62,7 +62,8 @@ const USAGE = `Usage:
 `;
 
 /** Models that can't chat (embeddings, images, speech), hidden from the picker. */
-const NOT_CHAT = /embed|tts|whisper|dall-e|image|audio|moderation|transcribe|speech|realtime|search-preview|rerank/i;
+export const NOT_CHAT =
+  /embed|tts|whisper|dall-e|image|audio|moderation|transcribe|speech|realtime|search-preview|rerank/i;
 
 const store = (ctx: Ctx) => ctx.secrets ?? defaultSecrets();
 

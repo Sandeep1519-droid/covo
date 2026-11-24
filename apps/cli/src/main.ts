@@ -65,8 +65,9 @@ Options:
 
 Environment:
   COVO_HOME             Use another data folder instead of ~/Covo
-  COVO_PROVIDER         anthropic, openai, gemini, xai, deepseek, mistral, groq,
-                        openrouter, ollama (default) or lmstudio
+  COVO_PROVIDER         anthropic, openai, gemini, xai, deepseek, mistral, groq, openrouter,
+                        cerebras, together, fireworks, huggingface, nvidia, moonshot, qwen,
+                        sambanova, ollama (default) or lmstudio
   COVO_MODEL            Model name (default: the provider's suggestion; qwen3.5:4b for Ollama)
   COVO_MODEL_API_KEY    API key (or the provider's usual variable, e.g. ANTHROPIC_API_KEY)
   COVO_MODEL_BASE_URL   Any other OpenAI-compatible service, or a proxy

@@ -38,8 +38,9 @@ Then `bun run setup && bun run demo --app` opens the same results in the app.
   - Spending limits live outside the bot's reach.
 - **Uses the AI you already pay for.**
   - **Codex** (any ChatGPT plan, Free included), **Claude Code** (Claude Pro or Max) and **Sign in with ChatGPT**: get, sign in to and connect each one from Settings. Covo never sees these sign-ins.
-  - API keys for Claude, GPT, Gemini, Grok, DeepSeek, Mistral, Groq and OpenRouter, kept in the macOS Keychain.
+  - API keys for Claude, GPT, Gemini, Grok, DeepSeek, Mistral, Groq, OpenRouter, Cerebras, Together AI, Fireworks, Hugging Face, NVIDIA, Moonshot (Kimi), Qwen and SambaNova, kept in the macOS Keychain. Paste a key and the service's own model list appears.
   - Free local models through Ollama or LM Studio.
+  - Pick any of these per message: Codex's models, Claude's, your keys' models, or a model on your Mac.
   - Bots fall back to their next model when one hits a limit.
 - **Works while you're away.**
   - Routines on a schedule, and a daily summary.
@@ -132,7 +133,7 @@ The Mac app (`bun run mac:build`, then open `apps/mac/build/Covo.app`) puts Covo
 - **macOS pieces:** Seatbelt (`sandbox-exec`), APFS `clonefile`, the Keychain, and launchd.
 - **A Swift menu bar app** with a WKWebView.
 - **About 30,000 lines** of TypeScript, TSX and Swift.
-- **Tests:** 340 tests across 52 files, run on macOS in CI together with the Swift app's build and tests. They cover the real sandbox, stand-ins for OpenAI and Telegram, and end-to-end acceptance demos.
+- **Tests:** 343 tests across 52 files, run on macOS in CI together with the Swift app's build and tests. They cover the real sandbox, stand-ins for OpenAI and Telegram, and end-to-end acceptance demos.
 - **Design:** the app was designed in Figma first; [design/screen-map.html](design/screen-map.html) maps its screens.
 
 ## Status and roadmap

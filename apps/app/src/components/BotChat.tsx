@@ -1,4 +1,4 @@
-import type { ApiBot, ApiChatMessage, ApiRoutine, ApiRun, ApiRunDetail } from "@covo/api";
+import type { ApiBot, ApiChatMessage, ApiModelGroup, ApiRoutine, ApiRun, ApiRunDetail } from "@covo/api";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.ts";
 import {
@@ -9,7 +9,6 @@ import {
   isActive,
   LEVEL_LABEL,
   type LiveStep,
-  modelFor,
   runById,
   runStatus,
   runsOf,
@@ -50,7 +49,9 @@ export function BotChat({
 }) {
   const [messages, setMessages] = useState<ApiChatMessage[] | null>(null);
   const [text, setText] = useState("");
-  const [modelName, setModelName] = useState<string | undefined>();
+  /** The model picked for the next messages (a model-choices value); unset: the bot's own models. */
+  const [choice, setChoice] = useState<string | undefined>();
+  const [groups, setGroups] = useState<ApiModelGroup[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The details panel beside the chat (Figma B4), and the routine open in the editor (B5; null: a new one).
@@ -62,7 +63,7 @@ export function BotChat({
   /** You're at the bottom of the chat (or haven't scrolled up). */
   const pinned = useRef(true);
 
-  const model = (modelName && data.models.find((m) => m.name === modelName)) || modelFor(data, bot);
+  const pick = pickOf(groups, choice, bot.models[0]);
   const known = useRef(new Set<string>());
   const asked = useRef(new Set<string>());
   known.current = new Set(data.runs.map((r) => r.id));
@@ -87,10 +88,18 @@ export function BotChat({
   useEffect(() => {
     setMessages(null);
     setText("");
-    setModelName(undefined);
+    setChoice(undefined);
     setError(null);
     setEditing(undefined);
   }, [bot.id]);
+
+  // Every model you can pick; again whenever your saved models change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: data.models signals a change in your models
+  useEffect(() => {
+    api<ApiModelGroup[]>("/model-choices")
+      .then(setGroups)
+      .catch(() => {});
+  }, [data.models]);
 
   const openRoutine = (r: ApiRoutine | null) => setEditing(r);
 
@@ -135,7 +144,7 @@ export function BotChat({
     try {
       await api(`/bots/${bot.id}/messages`, {
         method: "POST",
-        body: { text: goal, ...(model ? { model: model.name } : {}) },
+        body: { text: goal, ...(choice ? { model: choice } : {}) },
       });
       if (goal === text.trim()) setText("");
       await load();
@@ -246,9 +255,9 @@ export function BotChat({
               botName={bot.name}
               section={bot.department}
               level={LEVEL_LABEL[bot.level]}
-              models={data.models}
-              model={model}
-              onModel={setModelName}
+              groups={groups}
+              pick={pick}
+              onPick={setChoice}
               text={text}
               onText={setText}
               onSend={() => void send()}
@@ -514,6 +523,25 @@ function BotReply({
       </div>
     </div>
   );
+}
+
+/**
+ * The model the next message uses: the one you picked, or else the bot's first model (its usual
+ * choice), or else your default.
+ */
+function pickOf(
+  groups: ApiModelGroup[],
+  choice: string | undefined,
+  botModel: string | undefined,
+): { group: ApiModelGroup; option: ApiModelGroup["options"][number] } | undefined {
+  for (const g of groups) {
+    const o = choice ? g.options.find((x) => x.value === choice) : undefined;
+    if (o) return { group: g, option: o };
+  }
+  const g = groups.find((x) => x.connection === botModel) ?? groups.find((x) => x.isDefault) ?? groups[0];
+  if (!g) return undefined;
+  const o = g.options.find((x) => x.current) ?? g.options[0];
+  return o ? { group: g, option: o } : undefined;
 }
 
 /** Steps Covo stopped in this task: the proof that a planted instruction went nowhere. */

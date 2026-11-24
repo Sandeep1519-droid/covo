@@ -100,6 +100,7 @@ Each command a bot runs goes through `/usr/bin/sandbox-exec` with a generated pr
 | Network | Allowed (it has no shell to misuse it) | Only `localhost:<filter>`. The filter tunnels HTTPS to `*.openai.com` and `*.chatgpt.com` only. DNS is blocked. |
 | Its own sign-in | Its own Keychain entry | `~/Covo/engines/codex/auth.json`, in Covo's own Codex folder |
 | Settings it ignores | The workspace's `.claude` folder, MCP servers, slash commands | Your `~/.codex` settings and rules, ChatGPT apps, plugins, analytics |
+| Web | None | Codex's own web search, which runs on OpenAI's servers |
 
 The tests run the real sandbox every time:
 

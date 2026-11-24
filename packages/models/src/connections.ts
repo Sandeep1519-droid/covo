@@ -209,12 +209,27 @@ export async function resolveModel(
   home: string,
   store: SecretStore,
   env: Record<string, string | undefined>,
-  use?: string,
+  asked?: string,
 ): Promise<Resolved> {
+  let use = asked;
   if (env.COVO_PROVIDER || env.COVO_MODEL_BASE_URL) {
     return modelConfig(use ? { ...env, COVO_MODEL: use } : env);
   }
   const s = loadSettings(home);
+  // "<saved model>:<model>" picks one of that connection's models ("codex:gpt-6-luna"), and
+  // "local:<model>" one of your local models ("local:qwen3.5:4b"). Anything else is as before.
+  let override: string | undefined;
+  const colon = use ? use.indexOf(":") : -1;
+  if (use && colon > 0 && colon < use.length - 1) {
+    const head = use.slice(0, colon);
+    const rest = use.slice(colon + 1);
+    if (s.connections.some((c) => c.name === head)) {
+      use = head;
+      override = rest;
+    } else if (head === "local") {
+      return modelConfig({ ...env, COVO_MODEL: rest });
+    }
+  }
   const byName = use ? s.connections.find((c) => c.name === use) : undefined;
   const conn = byName ?? s.connections.find((c) => c.name === s.default);
   // "local" means the free local model unless you saved a model under that name.
@@ -239,7 +254,7 @@ export async function resolveModel(
       label: "ChatGPT (your plan)",
       kind: "openai-responses",
       baseUrl: env.COVO_CHATGPT_API ?? CHATGPT.api,
-      model: use && !byName ? use : conn.model,
+      model: override ?? (use && !byName ? use : conn.model),
       local: false,
       connection: conn.name,
       subscription: "chatgpt",
@@ -252,7 +267,7 @@ export async function resolveModel(
       label: `${engine.label} (${engine.plan})`,
       kind: "anthropic",
       baseUrl: "",
-      model: conn.model || "default",
+      model: override ?? (conn.model || "default"),
       local: false,
       connection: conn.name,
       engine: engine.id,
@@ -263,7 +278,7 @@ export async function resolveModel(
     ...modelConfig({
       COVO_PROVIDER: conn.provider === "custom" ? undefined : conn.provider,
       COVO_MODEL_BASE_URL: conn.baseUrl,
-      COVO_MODEL: use && !byName ? use : conn.model,
+      COVO_MODEL: override ?? (use && !byName ? use : conn.model),
       COVO_MODEL_CONTEXT: env.COVO_MODEL_CONTEXT,
       COVO_MODEL_THINK: env.COVO_MODEL_THINK,
       COVO_MODEL_KEEP_ALIVE: env.COVO_MODEL_KEEP_ALIVE,

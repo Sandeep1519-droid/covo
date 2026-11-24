@@ -122,6 +122,7 @@ export class Subscriptions {
         signingIn: job?.kind === "sign-in",
         step: job ? job.job.step() : null,
         url: job?.kind === "sign-in" ? job.job.url() : null,
+        codePrompt: job?.kind === "sign-in" ? (job.job.wantsCode?.() ?? false) : false,
         error: st.error ?? null,
         notice: engineNotice(info),
       };
@@ -140,6 +141,20 @@ export class Subscriptions {
       },
       engines,
     };
+  }
+
+  /** The models your ChatGPT account lists (Sign in with ChatGPT), from a 10-minute cache. */
+  async chatgptModelList(): Promise<ChatGPTModel[]> {
+    const o = chatgptOptions(this.ctx);
+    if (!(await chatgptSignedIn(o))) return [];
+    if (!this.models || this.ctx.now() - this.models.at > 10 * 60_000) {
+      try {
+        this.models = { at: this.ctx.now(), list: await chatgptModels(o) };
+      } catch {
+        this.models = { at: this.ctx.now(), list: this.models?.list ?? [] };
+      }
+    }
+    return this.models.list;
   }
 
   /** Starts Sign in with ChatGPT: the app opens the link; the result comes back here. */
@@ -243,6 +258,19 @@ export class Subscriptions {
     // Codex's sign-in and Sign in with ChatGPT use the same port on this Mac.
     if (id === "codex") this.cancelChatGPT();
     this.follow(id, "sign-in", startSignIn(this.ctx, info, path), by);
+  }
+
+  /**
+   * The code a sign-in page shows when it can't hand it to the program itself: it goes straight into
+   * the program's own prompt. Covo doesn't keep it.
+   */
+  sendCode(id: string, code: unknown): void {
+    const { info, st } = this.engine(id);
+    if (st.job?.kind !== "sign-in" || !st.job.job.answer) throw new HttpError(409, `${info.label} isn't signing in.`);
+    if (typeof code !== "string" || !/^[\w#.~-]{6,600}$/.test(code.trim()))
+      throw new HttpError(400, "That doesn't look like a sign-in code. Copy it again from the page.");
+    st.job.job.answer(code.trim());
+    this.ctx.print(`${id}: sign-in code passed to ${info.label}\n`);
   }
 
   cancel(id: string, kind?: "install" | "sign-in"): void {

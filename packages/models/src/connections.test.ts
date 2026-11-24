@@ -61,6 +61,34 @@ test("pick a saved connection by name, or another model for the default one", as
   expect((await resolveModel(home, store, { COVO_PROVIDER: "ollama", COVO_MODEL: "x" })).model).toBe("x");
 });
 
+test("<saved model>:<model> picks another of its models; local:<model> a model on this Mac", async () => {
+  const store = memorySecrets();
+  await addConnection(home, store, { name: "codex", provider: "codex", model: "default" });
+  await addConnection(home, store, { name: "claude-sub", provider: "claude-code", model: "default" });
+  await addConnection(home, store, { name: "claude", provider: "anthropic", model: "claude-opus-5-5", key: "k1" });
+  expect(await resolveModel(home, store, {}, "codex:gpt-6-luna")).toMatchObject({
+    engine: "codex",
+    connection: "codex",
+    model: "gpt-6-luna",
+  });
+  expect(await resolveModel(home, store, {}, "codex")).toMatchObject({ engine: "codex", model: "default" });
+  expect(await resolveModel(home, store, {}, "claude-sub:opus")).toMatchObject({
+    engine: "claude-code",
+    model: "opus",
+  });
+  expect(await resolveModel(home, store, {}, "claude:claude-haiku-5-5")).toMatchObject({
+    connection: "claude",
+    model: "claude-haiku-5-5",
+    apiKey: "k1",
+  });
+  expect(await resolveModel(home, store, {}, "local:qwen2.5:3b")).toMatchObject({
+    name: "ollama",
+    model: "qwen2.5:3b",
+  });
+  // A model name that merely contains a colon is a model name, as before.
+  expect(await resolveModel(home, store, {}, "qwen3.5:4b")).toMatchObject({ name: "ollama", model: "qwen3.5:4b" });
+});
+
 test("with nothing saved, Covo uses local Ollama", async () => {
   expect(await resolveModel(home, memorySecrets(), {})).toMatchObject({ name: "ollama", model: "qwen3.5:4b" });
 });

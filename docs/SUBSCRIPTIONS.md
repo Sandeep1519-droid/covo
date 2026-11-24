@@ -147,7 +147,9 @@ Sources, read 22 Nov 2026: [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk)
 - **Get and sign-in:** **Get** runs OpenAI's official installer. **Sign in** starts Codex's own Sign in with ChatGPT (`codex login`). Codex handles the sign-in and keeps it; Covo never reads it.
 - **Its own Codex folder:** Covo's Codex uses `~/Covo/engines/codex` instead of `~/.codex`. It never sees your own Codex settings, sign-in or history, and the `codex` you use in Terminal isn't affected. Covo tells Codex to keep its sign-in in that folder (`auth.json`) rather than the Keychain, so the sandbox needs no Keychain access.
 - **How tasks run:**
-  - The command is `codex exec --json --ephemeral --ignore-user-config --ignore-rules`, with approvals, web search, ChatGPT apps, plugins and OpenAI's analytics all off.
+  - The command is `codex exec --json --ephemeral --ignore-user-config --ignore-rules`, with approvals, ChatGPT apps, plugins and OpenAI's analytics off.
+  - Web search is on (since 25 Nov 2026), so bots can answer questions about today. It's Codex's own tool and runs on OpenAI's servers, so the network filter stays the same.
+  - You pick its model per message, or as its usual one, from the models Codex lists for your account (`codex debug models`).
   - Codex checks OpenAI's certificates against the Mac's own list in `/etc/ssl/cert.pem` (`CODEX_CA_CERTIFICATE`), because its sandbox has no Keychain access.
   - It works on Covo's copy of your files, in Covo's sandbox.
   - Codex's own sandbox is off, because macOS can't put one sandbox inside another.

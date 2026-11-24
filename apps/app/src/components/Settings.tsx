@@ -2,7 +2,7 @@
 // keys (a key goes straight to the Keychain and is never shown again), Spending (limits and what was
 // spent), and Computer (this Mac's power profile and the activity log check).
 
-import type { ApiHealth, ApiLimits, ApiModel, ApiProfile, ApiProvider, ApiUsage } from "@covo/api";
+import type { ApiHealth, ApiLimits, ApiModel, ApiModelGroup, ApiProfile, ApiProvider, ApiUsage } from "@covo/api";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.ts";
 import { type Data, type SettingsTab, usd } from "../model.ts";
@@ -142,11 +142,31 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
   /** The service whose key you're adding, or false. */
   const [adding, setAdding] = useState<string | false>(false);
   const [error, setError] = useState<string | null>(null);
+  /** Each saved model's models to choose from (Codex's, Claude Code's, your local ones…). */
+  const [groups, setGroups] = useState<ApiModelGroup[]>([]);
   useEffect(() => {
     api<ApiProvider[]>("/providers")
       .then(setProviders)
       .catch(() => {});
   }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: models signals a change in your models
+  useEffect(() => {
+    api<ApiModelGroup[]>("/model-choices")
+      .then(setGroups)
+      .catch(() => {});
+  }, [models]);
+  /** Makes one of a saved model's models its usual one. */
+  const choose = async (name: string, value: string) => {
+    const slug = value === name ? "default" : value.slice(name.length + 1);
+    setError(null);
+    try {
+      await api(`/models/${encodeURIComponent(name)}`, { method: "PUT", body: { model: slug } });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      refresh();
+    }
+  };
   const act = async (path: string, method: string) => {
     setError(null);
     try {
@@ -178,6 +198,7 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
                     : m.model}
                 {m.hasKey ? " · key in the Keychain" : ""}
               </span>
+              <ModelSelect name={m.name} group={groups.find((g) => g.connection === m.name)} onChoose={choose} />
             </span>
             {m.isDefault ? (
               <Pill label="Default" tone="success" />
@@ -242,6 +263,34 @@ function Models({ models, refresh }: { models: ApiModel[]; refresh: () => void }
   );
 }
 
+/** A saved model's usual model, when it has several to choose from. */
+function ModelSelect({
+  name,
+  group,
+  onChoose,
+}: {
+  name: string;
+  group: ApiModelGroup | undefined;
+  onChoose: (name: string, value: string) => void;
+}) {
+  if (!group || group.options.length < 2) return null;
+  const current = group.options.find((o) => o.current) ?? group.options[0];
+  return (
+    <select
+      className="t-body-s plan-model"
+      aria-label={`Usual model for ${name}`}
+      value={current?.value}
+      onChange={(ev) => onChoose(name, ev.target.value)}
+    >
+      {group.options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function AddModel({
   initial,
   providers,
@@ -263,13 +312,49 @@ function AddModel({
   const [makeDefault, setMakeDefault] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The models the service offers, read with your key as you paste it. */
+  const [found, setFound] = useState<string[] | null>(null);
+  const [finding, setFinding] = useState(false);
+  const [findError, setFindError] = useState<string | null>(null);
+
+  // Paste a key (or pick a service on this Mac) and the service's own model list appears.
+  useEffect(() => {
+    setFound(null);
+    setFindError(null);
+    if (!p || (p.needsKey && key.trim().length < 8)) return;
+    let live = true;
+    const t = setTimeout(() => {
+      setFinding(true);
+      api<{ models: string[] }>(`/providers/${encodeURIComponent(provider)}/models`, {
+        method: "POST",
+        body: p.needsKey ? { key } : {},
+      })
+        .then((r) => {
+          if (!live) return;
+          setFound(r.models);
+          setModel((m) => m || r.models[0] || "");
+        })
+        .catch((e: Error) => live && setFindError(e.message))
+        .finally(() => live && setFinding(false));
+    }, 600);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [provider, key, p]);
+
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
       await api("/models", {
         method: "POST",
-        body: { provider, model: model || p?.models[0] || "", makeDefault, ...(p?.needsKey ? { key } : {}) },
+        body: {
+          provider,
+          model: model || found?.[0] || p?.models[0] || "",
+          makeDefault,
+          ...(p?.needsKey ? { key } : {}),
+        },
       });
       setKey("");
       onDone();
@@ -311,14 +396,25 @@ function AddModel({
           className="input t-body-m"
           list="model-suggestions"
           value={model}
-          placeholder={p?.models[0] ?? "model name"}
+          placeholder={found?.[0] ?? p?.models[0] ?? "pick or type a model"}
           onChange={(e) => setModel(e.target.value)}
         />
         <datalist id="model-suggestions">
-          {p?.models.map((m) => (
+          {(found ?? p?.models ?? []).map((m) => (
             <option key={m} value={m} />
           ))}
         </datalist>
+        <span className="t-caption muted">
+          {finding
+            ? "Looking up its models…"
+            : found
+              ? `${found.length} models to pick from. Type to search.`
+              : findError
+                ? findError
+                : p?.needsKey
+                  ? "Paste your key below to see its models."
+                  : ""}
+        </span>
       </label>
       {p?.needsKey && (
         <label className="field">
